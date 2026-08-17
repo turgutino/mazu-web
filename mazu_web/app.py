@@ -5,7 +5,7 @@ from pathlib import Path
 
 from mazu.action_log.store import ActionLogStore
 from mazu.checkpoint.manager import CheckpointManager
-from mazu.config import _SECRET_CONFIG_KEYS, config_path, list_config, set_config_value
+from mazu.config import _SECRET_CONFIG_KEYS, config_path, list_config, set_config_value, unset_config_value
 from mazu.diagnostics import check_live_api_key, ensure_gitignore, run_diagnostics
 from mazu.llm.capabilities import list_capabilities
 from mazu.memory.consolidate import apply_consolidation, find_duplicate_clusters
@@ -250,6 +250,16 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
     def list_checkpoints():
         checkpoint_manager = CheckpointManager(root)
         return jsonify(checkpoint_manager.timeline_entries())
+
+    @app.post("/api/checkpoints")
+    def create_checkpoint():
+        # Mirrors bare `mazu checkpoint` (no subcommand) -- a manual snapshot with
+        # no live conversation to attach, same trigger label ("manual_cli") so it
+        # shows up in the timeline indistinguishably from the CLI's own version.
+        ensure_gitignore(root)
+        checkpoint_manager = CheckpointManager(root)
+        entry = checkpoint_manager.snapshot(messages=[], trigger="manual_cli")
+        return jsonify(entry)
 
     @app.get("/api/checkpoints/<checkpoint_id>/diff")
     def checkpoint_diff(checkpoint_id: str):
@@ -518,6 +528,11 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
         return jsonify({"ok": True})
+
+    @app.delete("/api/config/<key>")
+    def delete_config(key: str):
+        was_set = unset_config_value(key)
+        return jsonify({"ok": True, "was_set": was_set})
 
     # -- models / doctor --------------------------------------------------
 

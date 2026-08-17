@@ -247,8 +247,9 @@
     <div class="tab-header"><h1>Checkpoints</h1><span class="hint">Timeline &amp; rollback</span></div>
     <div class="tab-body">
       <div class="field-row" style="align-items:flex-end; margin-bottom:16px;">
+        <button class="btn small" id="take-checkpoint-btn" style="margin-bottom:14px;">Take checkpoint now</button>
         <div class="field" style="max-width:140px;"><label>Keep last N</label><input type="number" id="prune-keep-last" placeholder="e.g. 10"></div>
-        <button class="btn ghost small ghost" id="prune-btn" style="margin-bottom:14px;">Prune older</button>
+        <button class="btn ghost small" id="prune-btn" style="margin-bottom:14px;">Prune older</button>
       </div>
       <div id="checkpoints-body" class="empty">Loading...</div>
     </div>
@@ -671,6 +672,13 @@ async function loadCheckpoints() {
   });
 }
 
+$('#take-checkpoint-btn').addEventListener('click', async () => {
+  const res = await fetch('/api/checkpoints', {method: 'POST'});
+  const data = await res.json();
+  if (!res.ok) { alert(data.error || 'Failed to create checkpoint.'); return; }
+  loadCheckpoints();
+});
+
 $('#prune-btn').addEventListener('click', async () => {
   const keepLast = $('#prune-keep-last').value;
   if (!keepLast) { alert('Enter how many recent checkpoints to keep.'); return; }
@@ -1066,11 +1074,16 @@ async function loadConfig() {
   if (!keys.length) { body.textContent = 'No config set.'; return; }
   body.className = ''; body.innerHTML = '';
   const table = document.createElement('table');
-  table.innerHTML = `<thead><tr><th>Key</th><th>Value</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>Key</th><th>Value</th><th></th></tr></thead>`;
   const tbody = document.createElement('tbody');
   keys.forEach(k => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${esc(k)}</td><td>${esc(data[k])}</td>`;
+    tr.innerHTML = `<td>${esc(k)}</td><td>${esc(data[k])}</td><td><button class="btn small ghost" data-act="unset">Unset</button></td>`;
+    tr.querySelector('[data-act=unset]').onclick = async () => {
+      if (!confirm(`Unset "${k}"?`)) return;
+      await fetch(`/api/config/${encodeURIComponent(k)}`, {method: 'DELETE'});
+      loadConfig();
+    };
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);

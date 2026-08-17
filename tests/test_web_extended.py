@@ -478,6 +478,49 @@ def test_memory_consolidate_dry_run_does_not_change_anything(project):
 
 
 # ---------------------------------------------------------------------------
+# config -- unset (the one config subcommand missed in the first pass)
+# ---------------------------------------------------------------------------
+
+
+def test_config_unset_endpoint(project):
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    client.post("/api/config", json={"key": "router_suggestions", "value": "false"})
+    assert client.get("/api/config").get_json()["router_suggestions"] == "false"
+
+    res = client.delete("/api/config/router_suggestions")
+    assert res.status_code == 200
+    assert res.get_json() == {"ok": True, "was_set": True}
+    assert "router_suggestions" not in client.get("/api/config").get_json()
+
+
+def test_config_unset_endpoint_is_a_no_op_for_an_unset_key(project):
+    app = create_app(project, None, None)
+    res = app.test_client().delete("/api/config/router_suggestions")
+    assert res.status_code == 200
+    assert res.get_json() == {"ok": True, "was_set": False}
+
+
+# ---------------------------------------------------------------------------
+# checkpoints -- bare "take a checkpoint now" (mirrors bare `mazu checkpoint`)
+# ---------------------------------------------------------------------------
+
+
+def test_create_checkpoint_endpoint(project):
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.post("/api/checkpoints")
+    assert res.status_code == 200
+    entry = res.get_json()
+    assert entry["trigger"] == "manual_cli"
+
+    rows = client.get("/api/checkpoints").get_json()
+    assert any(r["id"] == entry["id"] for r in rows)
+
+
+# ---------------------------------------------------------------------------
 # usage
 # ---------------------------------------------------------------------------
 
