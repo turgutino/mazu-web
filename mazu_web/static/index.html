@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>mazu web</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0f1115; --panel: #161923; --border: #2a2f3d; --text: #e6e8ee;
+    --muted: #8b91a3; --accent: #5b8def; --danger: #e0605a; --good: #4fb477;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", sans-serif; height: 100vh; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: 0.02em; }
+  nav { display: flex; gap: 4px; }
+  nav button { background: none; border: none; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  nav button.active { background: var(--panel); color: var(--text); }
+  #model-badge { margin-left: auto; color: var(--muted); font-size: 12px; }
+  main { flex: 1; overflow: hidden; display: flex; }
+  .tab { display: none; flex: 1; overflow: auto; padding: 16px; }
+  .tab.active { display: flex; flex-direction: column; }
+
+  /* chat */
+  #chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px; }
+  .msg { max-width: 78%; padding: 8px 12px; border-radius: 10px; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: white; }
+  .msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
+  .msg.system { align-self: center; color: var(--muted); font-size: 12px; background: none; }
+  .msg.error { align-self: center; color: var(--danger); background: none; }
+  .confirm-card { align-self: center; border: 1px solid var(--danger); background: var(--panel); padding: 10px 14px; border-radius: 8px; }
+  .confirm-card button { margin-top: 8px; margin-right: 8px; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; }
+  .confirm-card button.approve { border-color: var(--good); color: var(--good); }
+  .confirm-card button.deny { border-color: var(--danger); color: var(--danger); }
+  #chat-input-row { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+  #chat-input { flex: 1; background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 8px; resize: none; font: inherit; }
+  #chat-input-row button { padding: 0 18px; border-radius: 8px; border: none; background: var(--accent); color: white; cursor: pointer; }
+
+  /* tables */
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+  .status-completed { color: var(--good); }
+  .status-stopped, .status-failed { color: var(--danger); }
+  .row-actions button { font-size: 12px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+  select { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin-bottom: 12px; }
+  .empty { color: var(--muted); padding: 20px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>mazu web</h1>
+  <nav>
+    <button data-tab="chat" class="active">Chat</button>
+    <button data-tab="checkpoints">Checkpoints</button>
+    <button data-tab="memory">Memory</button>
+    <button data-tab="router">Router</button>
+  </nav>
+  <div id="model-badge"></div>
+</header>
+<main>
+  <section id="tab-chat" class="tab active">
+    <div id="chat-log"></div>
+    <div id="chat-input-row">
+      <textarea id="chat-input" rows="2" placeholder="Describe a task..."></textarea>
+      <button id="chat-send">Send</button>
+    </div>
+  </section>
+
+  <section id="tab-checkpoints" class="tab">
+    <div id="checkpoints-body" class="empty">Loading...</div>
+  </section>
+
+  <section id="tab-memory" class="tab">
+    <div id="memory-body" class="empty">Loading...</div>
+  </section>
+
+  <section id="tab-router" class="tab">
+    <select id="router-task-type"><option value="">all task types</option></select>
+    <div id="router-body" class="empty">Loading...</div>
+  </section>
+</main>
+
+<script>
+const $ = (sel, root) => (root || document).querySelector(sel);
+const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+
+// -- tabs ---------------------------------------------------------------
+$$('nav button').forEach(btn => btn.addEventListener('click', () => {
+  $$('nav button').forEach(b => b.classList.remove('active'));
+  $$('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  $('#tab-' + btn.dataset.tab).classList.add('active');
+  if (btn.dataset.tab === 'checkpoints') loadCheckpoints();
+  if (btn.dataset.tab === 'memory') loadMemory();
+  if (btn.dataset.tab === 'router') loadRouter();
+}));
+
+// -- chat -----------------------------------------------------------------
+let sessionId = null;
+let currentAssistantEl = null;
+let evtSource = null;
+
+function appendMsg(role, text) {
+  const log = $('#chat-log');
+  const el = document.createElement('div');
+  el.className = 'msg ' + role;
+  el.textContent = text;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+
+function appendConfirm(toolName, toolInput) {
+  const log = $('#chat-log');
+  const card = document.createElement('div');
+  card.className = 'confirm-card';
+  card.innerHTML = `<div><strong>${toolName}</strong>(${escapeHtml(JSON.stringify(toolInput))})</div>`;
+  const approve = document.createElement('button');
+  approve.textContent = 'Run it';
+  approve.className = 'approve';
+  const deny = document.createElement('button');
+  deny.textContent = 'Decline';
+  deny.className = 'deny';
+  approve.onclick = () => { respondConfirm(true); card.remove(); };
+  deny.onclick = () => { respondConfirm(false); card.remove(); };
+  card.appendChild(approve);
+  card.appendChild(deny);
+  log.appendChild(card);
+  log.scrollTop = log.scrollHeight;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+async function respondConfirm(approved) {
+  await fetch(`/api/chat/${sessionId}/confirm`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({approved}),
+  });
+}
+
+async function startSession() {
+  const res = await fetch('/api/chat/start', {method: 'POST'});
+  const data = await res.json();
+  sessionId = data.session_id;
+  $('#model-badge').textContent = data.model;
+  evtSource = new EventSource(`/api/chat/${sessionId}/events`);
+  evtSource.onmessage = (e) => {
+    const event = JSON.parse(e.data);
+    if (event.type === 'delta') {
+      if (!currentAssistantEl) currentAssistantEl = appendMsg('assistant', '');
+      currentAssistantEl.textContent += event.text;
+      $('#chat-log').scrollTop = $('#chat-log').scrollHeight;
+    } else if (event.type === 'usage') {
+      currentAssistantEl = null;
+      const suffix = event.total_cost != null ? ` | ~$${event.total_cost.toFixed(4)} total` : '';
+      appendMsg('system', `[usage] ${event.text}${suffix}`);
+    } else if (event.type === 'info') {
+      appendMsg('system', `[memory] ${event.text}`);
+    } else if (event.type === 'router_suggestion') {
+      appendMsg('system', event.text);
+    } else if (event.type === 'confirm_request') {
+      currentAssistantEl = null;
+      appendConfirm(event.tool_name, event.tool_input);
+    } else if (event.type === 'error') {
+      currentAssistantEl = null;
+      appendMsg('error', `[error] ${event.text}`);
+    } else if (event.type === 'turn_done') {
+      currentAssistantEl = null;
+    }
+  };
+}
+
+async function sendMessage() {
+  const input = $('#chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  appendMsg('user', text);
+  input.value = '';
+  if (!sessionId) await startSession();
+  await fetch(`/api/chat/${sessionId}/message`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text}),
+  });
+}
+
+$('#chat-send').addEventListener('click', sendMessage);
+$('#chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+// -- checkpoints ----------------------------------------------------------
+async function loadCheckpoints() {
+  const body = $('#checkpoints-body');
+  body.textContent = 'Loading...';
+  const rows = await (await fetch('/api/checkpoints')).json();
+  if (!rows.length) { body.textContent = 'No checkpoints yet.'; body.className = 'empty'; return; }
+  body.className = '';
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>ID</th><th>Trigger</th><th>Summary</th><th>Created</th><th></th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  rows.forEach(cp => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${cp.id}</td><td>${cp.trigger || ''}</td><td>${escapeHtml(cp.summary || '')}</td><td>${cp.created_at || ''}</td>`;
+    const actionTd = document.createElement('td');
+    actionTd.className = 'row-actions';
+    const btn = document.createElement('button');
+    btn.textContent = 'Rollback';
+    btn.onclick = async () => {
+      if (!confirm(`Rollback to ${cp.id}? This discards code, memory, and conversation state since then.`)) return;
+      const res = await fetch(`/api/checkpoints/${cp.id}/rollback`, {method: 'POST'});
+      const data = await res.json();
+      if (data.error) alert(data.error); else alert(`Restored to ${cp.id}.`);
+    };
+    actionTd.appendChild(btn);
+    tr.appendChild(actionTd);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  body.innerHTML = '';
+  body.appendChild(table);
+}
+
+// -- memory -----------------------------------------------------------------
+async function loadMemory() {
+  const body = $('#memory-body');
+  body.textContent = 'Loading...';
+  const rows = await (await fetch('/api/memory')).json();
+  if (!rows.length) { body.textContent = 'No memories saved yet.'; body.className = 'empty'; return; }
+  body.className = '';
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>Category</th><th>Title</th><th>Body</th><th>Pinned</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  rows.forEach(m => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${m.category || ''}</td><td>${escapeHtml(m.title || '')}</td><td>${escapeHtml((m.body || '').slice(0, 200))}</td><td>${m.pinned ? 'yes' : ''}</td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  body.innerHTML = '';
+  body.appendChild(table);
+}
+
+// -- router -----------------------------------------------------------------
+let routerTypesLoaded = false;
+
+async function loadRouter() {
+  const body = $('#router-body');
+  body.textContent = 'Loading...';
+  const taskType = $('#router-task-type').value;
+  const qs = taskType ? `?task_type=${encodeURIComponent(taskType)}` : '';
+  const data = await (await fetch('/api/router/stats' + qs)).json();
+
+  if (!routerTypesLoaded) {
+    data.task_types.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t;
+      $('#router-task-type').appendChild(opt);
+    });
+    routerTypesLoaded = true;
+  }
+
+  if (!data.stats.length) { body.textContent = 'No explore history recorded yet.'; body.className = 'empty'; return; }
+  body.className = '';
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>Model</th><th>Wins</th><th>Win rate</th><th>Tests passed</th><th>Avg cost</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  data.stats.forEach(s => {
+    const tr = document.createElement('tr');
+    const passStr = s.tested ? `${s.passed}/${s.tested}` : '—';
+    tr.innerHTML = `<td>${s.model}</td><td>${s.wins}/${s.total}</td><td>${(s.win_rate * 100).toFixed(0)}%</td><td>${passStr}</td><td>$${s.avg_cost.toFixed(4)}</td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  body.innerHTML = '';
+  body.appendChild(table);
+}
+
+$('#router-task-type').addEventListener('change', loadRouter);
+</script>
+</body>
+</html>

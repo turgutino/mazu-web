@@ -1,0 +1,52 @@
+[project]
+name = "mazu-web"
+version = "0.1.0"
+description = "A local browser UI for Mazu -- chat (streamed) plus read-only Checkpoints/Memory/Router tabs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Turgut Sofuyev", email = "turgut.sofuyev@gmail.com" },
+]
+keywords = ["ai", "agent", "coding-agent", "web-ui", "mazu"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+]
+dependencies = [
+    "mazu @ git+https://github.com/turgutino/Mazu.git",
+    "flask>=3.0",
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/turgutino/mazu-web"
+Repository = "https://github.com/turgutino/mazu-web"
+"Core project" = "https://github.com/turgutino/Mazu"
+
+[project.scripts]
+mazu-web = "mazu_web.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true  # needed for the `mazu @ git+https://...` dependency until mazu is on PyPI
+
+[tool.hatch.build.targets.wheel]
+packages = ["mazu_web"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
