@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import queue
 from pathlib import Path
@@ -5,6 +6,8 @@ from pathlib import Path
 from mazu.action_log.store import ActionLogStore
 from mazu.checkpoint.manager import CheckpointManager
 from mazu.config import _SECRET_CONFIG_KEYS, list_config, set_config_value
+from mazu.diagnostics import run_diagnostics
+from mazu.llm.capabilities import list_capabilities
 from mazu.memory.store import MemoryStore
 from mazu.runs.router import TASK_TYPES, model_stats_by_task_type
 from mazu.runs.store import RunStore
@@ -12,7 +15,7 @@ from mazu.skills.manager import SkillManager
 from mazu.usage.store import UsageStore
 
 from mazu_web.chat_session import ChatSession
-from mazu_web.task_session import STDOUT_CAPTURE_LOCK, ExploreSession, RunSession
+from mazu_web.task_session import STDOUT_CAPTURE_LOCK, CouncilSession, ExploreSession, RunSession
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -33,7 +36,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
 
     app = Flask(__name__, static_folder=None)
     chat_sessions: dict[str, ChatSession] = {}
-    task_sessions: dict[str, "RunSession | ExploreSession"] = {}
+    task_sessions: dict[str, "RunSession | ExploreSession | CouncilSession"] = {}
     app.sessions = chat_sessions  # exposed for tests; not used by any route itself
     app.task_sessions = task_sessions
 
@@ -90,7 +93,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
 
     def _start_task(kind: str, factory) -> tuple[dict, int]:
         if not STDOUT_CAPTURE_LOCK.acquire(blocking=False):
-            return {"error": f"Another run/explore is already in progress on this server -- wait for it to finish."}, 409
+            return {"error": "Another run/explore/council is already in progress on this server -- wait for it to finish."}, 409
         try:
             session = factory()
         except Exception:
@@ -134,6 +137,23 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         )
         return jsonify(payload), status
 
+    @app.post("/api/council")
+    def start_council():
+        body = request.get_json(silent=True) or {}
+        question = (body.get("question") or "").strip()
+        models = [m.strip() for m in (body.get("models") or "").split(",") if m.strip()]
+        lead_model = (body.get("lead_model") or "").strip() or (models[0] if models else None)
+        if not question or not models or not lead_model:
+            return jsonify({"error": "question and at least one model are required"}), 400
+        payload, status = _start_task(
+            "council",
+            lambda: CouncilSession(
+                root=root, question=question, models=models, lead_model=lead_model,
+                max_cost=body.get("max_cost"),
+            ),
+        )
+        return jsonify(payload), status
+
     @app.get("/api/tasks/<task_id>/events")
     def task_events(task_id: str):
         session = task_sessions.get(task_id)
@@ -170,6 +190,19 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
         return jsonify({"ok": True, "checkpoint_id": checkpoint_id, "message_count": len(result["messages"])})
+
+    @app.post("/api/checkpoints/<checkpoint_id>/branch-from")
+    def branch_from_checkpoint(checkpoint_id: str):
+        body = request.get_json(silent=True) or {}
+        branch_name = (body.get("branch_name") or "").strip()
+        if not branch_name:
+            return jsonify({"error": "branch_name is required"}), 400
+        checkpoint_manager = CheckpointManager(root)
+        try:
+            entry = checkpoint_manager.branch_from(checkpoint_id, branch_name)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify({"ok": True, "checkpoint_id": entry["id"], "branch_name": branch_name})
 
     # -- memory -------------------------------------------------------------
 
@@ -296,6 +329,22 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
         return jsonify({"ok": True})
+
+    # -- models / doctor --------------------------------------------------
+
+    @app.get("/api/models")
+    def models_info():
+        rows = list_capabilities()
+        return jsonify([dataclasses.asdict(r) for r in rows])
+
+    @app.get("/api/doctor")
+    def doctor():
+        # --live makes one minimal real API call per configured provider (costs a
+        # fraction of a cent) -- opt-in via query param, default off, same as the
+        # CLI's own --live flag defaulting to False.
+        live = request.args.get("live") == "true"
+        results = run_diagnostics(root, live=live)
+        return jsonify([dataclasses.asdict(r) for r in results])
 
     return app
 

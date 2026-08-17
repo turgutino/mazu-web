@@ -152,6 +152,7 @@
     <button data-tab="chat" class="active"><span class="glyph">&gt;_</span>Chat</button>
     <button data-tab="run"><span class="glyph">&#9654;</span>Run</button>
     <button data-tab="explore"><span class="glyph">&#8942;</span>Explore</button>
+    <button data-tab="council"><span class="glyph">&#9737;</span>Council</button>
     <div class="divider"></div>
     <button data-tab="checkpoints"><span class="glyph">&#9673;</span>Checkpoints</button>
     <button data-tab="memory"><span class="glyph">&#9635;</span>Memory</button>
@@ -162,6 +163,8 @@
     <button data-tab="usage"><span class="glyph">&#164;</span>Usage</button>
     <button data-tab="log"><span class="glyph">&#9776;</span>Log</button>
     <div class="divider"></div>
+    <button data-tab="models"><span class="glyph">&#9662;</span>Models</button>
+    <button data-tab="doctor"><span class="glyph">&#10003;</span>Doctor</button>
     <button data-tab="config"><span class="glyph">&#9881;</span>Config</button>
   </nav>
   <div id="status-strip">
@@ -214,6 +217,23 @@
         <button class="btn" id="explore-start">Start Explore</button>
       </div>
       <div id="explore-log" class="mono-block" style="flex:1;"></div>
+    </div>
+  </section>
+
+  <!-- COUNCIL -->
+  <section id="tab-council" class="tab">
+    <div class="tab-header"><h1>Council</h1><span class="hint">Ask multiple models independently, one lead synthesizes (mazu council)</span></div>
+    <div class="tab-body" style="display:flex; flex-direction:column; gap:16px; height:100%;">
+      <div class="card">
+        <div class="field"><label>Question</label><textarea id="council-question" rows="2" placeholder="Should we migrate this service to async I/O?"></textarea></div>
+        <div class="field-row">
+          <div class="field"><label>Members (comma-separated)</label><input type="text" id="council-models" placeholder="anthropic:claude-sonnet-5,openai:gpt-5"></div>
+          <div class="field"><label>Lead (synthesizes)</label><input type="text" id="council-lead" placeholder="anthropic:claude-opus-4-8"></div>
+          <div class="field"><label>Max cost (USD, optional)</label><input type="number" id="council-max-cost" step="0.01" placeholder="unset"></div>
+        </div>
+        <button class="btn" id="council-start">Ask Council</button>
+      </div>
+      <div id="council-log" class="mono-block" style="flex:1;"></div>
     </div>
   </section>
 
@@ -278,6 +298,22 @@
     </div>
   </section>
 
+  <!-- MODELS -->
+  <section id="tab-models" class="tab">
+    <div class="tab-header"><h1>Models</h1><span class="hint">Streaming, tool use, context window, pricing (best-effort)</span></div>
+    <div class="tab-body"><div id="models-body" class="empty">Loading...</div></div>
+  </section>
+
+  <!-- DOCTOR -->
+  <section id="tab-doctor" class="tab">
+    <div class="tab-header"><h1>Doctor</h1><span class="hint">Setup diagnostics</span></div>
+    <div class="tab-body">
+      <div class="checkbox-row"><input type="checkbox" id="doctor-live"><label for="doctor-live">Also verify keys with a real API call (tiny cost)</label></div>
+      <button class="btn ghost" id="doctor-refresh" style="margin-bottom:16px;">Re-check</button>
+      <div id="doctor-body" class="empty">Loading...</div>
+    </div>
+  </section>
+
   <!-- CONFIG -->
   <section id="tab-config" class="tab">
     <div class="tab-header"><h1>Config</h1><span class="hint">~/.mazu/config.toml</span></div>
@@ -314,7 +350,7 @@ const fmtCost = (n) => `$${(n || 0).toFixed(4)}`;
 const loaders = {
   checkpoints: loadCheckpoints, memory: loadMemory, skills: loadSkills,
   runs: loadRuns, router: loadRouter, usage: loadUsage, log: loadLogSessions,
-  config: loadConfig,
+  config: loadConfig, models: loadModels, doctor: loadDoctor,
 };
 $$('#nav button').forEach(btn => btn.addEventListener('click', () => {
   $$('#nav button').forEach(b => b.classList.remove('active'));
@@ -330,9 +366,10 @@ async function pollBusy() {
   try {
     const data = await (await fetch('/api/tasks/busy')).json();
     $('#busy-dot').classList.toggle('on', data.busy);
-    $('#busy-text').textContent = data.busy ? 'busy (run/explore)' : 'idle';
+    $('#busy-text').textContent = data.busy ? 'busy (run/explore/council)' : 'idle';
     $('#run-start').disabled = data.busy;
     $('#explore-start').disabled = data.busy;
+    $('#council-start').disabled = data.busy;
   } catch (e) {}
 }
 setInterval(pollBusy, 2000);
@@ -486,6 +523,23 @@ $('#explore-start').addEventListener('click', async () => {
   streamTask(data.task_id, $('#explore-log'));
 });
 
+$('#council-start').addEventListener('click', async () => {
+  const question = $('#council-question').value.trim();
+  const models = $('#council-models').value.trim();
+  if (!question || !models) return;
+  const body = { question, models };
+  const lead = $('#council-lead').value.trim();
+  if (lead) body.lead_model = lead;
+  const maxCost = $('#council-max-cost').value;
+  if (maxCost) body.max_cost = parseFloat(maxCost);
+
+  const res = await fetch('/api/council', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const data = await res.json();
+  if (!res.ok) { $('#council-log').textContent = `[error] ${data.error}`; return; }
+  pollBusy();
+  streamTask(data.task_id, $('#council-log'));
+});
+
 // =========================================================================
 // CHECKPOINTS
 // =========================================================================
@@ -506,6 +560,7 @@ async function loadCheckpoints() {
       <div style="margin-top:6px; color:var(--muted);">${esc(cp.summary || '')}</div>
       <div class="row-actions" style="margin-top:10px;">
         <button class="btn small ghost" data-act="diff">Diff</button>
+        <button class="btn small ghost" data-act="branch">Branch from</button>
         <button class="btn small" data-act="rollback">Rollback</button>
       </div>
       <div class="diff-panel mono-block" style="display:none; margin-top:10px;"></div>
@@ -518,6 +573,16 @@ async function loadCheckpoints() {
       const res = await fetch(`/api/checkpoints/${cp.id}/diff`);
       const data = await res.json();
       panel.textContent = res.ok ? (data.diff_stat || '(no changes)') : data.error;
+    };
+    card.querySelector('[data-act=branch]').onclick = async () => {
+      const branchName = prompt(`New branch name, pointing at ${cp.id} (your current branch/working tree is untouched):`);
+      if (!branchName) return;
+      const res = await fetch(`/api/checkpoints/${cp.id}/branch-from`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({branch_name: branchName}),
+      });
+      const data = await res.json();
+      alert(data.error || `Created branch '${branchName}' at ${cp.id}. Switch with: git checkout ${branchName}`);
     };
     card.querySelector('[data-act=rollback]').onclick = async () => {
       if (!confirm(`Rollback to ${cp.id}? This discards code, memory, and conversation state since then.`)) return;
@@ -749,6 +814,62 @@ async function loadLogDetail(sessionId) {
     body.appendChild(div);
   });
 }
+
+// =========================================================================
+// MODELS
+// =========================================================================
+async function loadModels() {
+  const body = $('#models-body');
+  body.textContent = 'Loading...'; body.className = 'empty';
+  const rows = await (await fetch('/api/models')).json();
+  if (!rows.length) { body.textContent = 'No model info available.'; return; }
+  body.className = ''; body.innerHTML = '';
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>Model</th><th>Stream</th><th>Tools</th><th>Context</th><th>$/1M in</th><th>$/1M out</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  rows.forEach(m => {
+    const tr = document.createElement('tr');
+    const ctx = m.context_window != null ? m.context_window.toLocaleString() : '?';
+    const pIn = m.input_price_per_million != null ? `$${m.input_price_per_million.toFixed(2)}` : '?';
+    const pOut = m.output_price_per_million != null ? `$${m.output_price_per_million.toFixed(2)}` : '?';
+    tr.innerHTML = `
+      <td>${esc(m.provider)}:${esc(m.model)}</td>
+      <td>${m.streaming ? 'yes' : 'no'}</td>
+      <td>${m.tool_use ? 'yes' : 'no'}</td>
+      <td>${ctx}</td><td>${pIn}</td><td>${pOut}</td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  body.appendChild(table);
+  const note = document.createElement('div');
+  note.style.cssText = 'color:var(--dim); font-size:11px; margin-top:12px;';
+  note.textContent = 'Best-effort and may go stale -- verify against your provider\'s own docs before relying on it for capacity planning.';
+  body.appendChild(note);
+}
+
+// =========================================================================
+// DOCTOR
+// =========================================================================
+async function loadDoctor() {
+  const body = $('#doctor-body');
+  body.textContent = 'Loading...'; body.className = 'empty';
+  const live = $('#doctor-live').checked;
+  const rows = await (await fetch('/api/doctor' + (live ? '?live=true' : ''))).json();
+  body.className = ''; body.innerHTML = '';
+  rows.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    const cls = r.status === 'ok' ? 'ok' : (r.status === 'fail' ? 'bad' : 'warn');
+    div.innerHTML = `
+      <div style="display:flex; justify-content:space-between;">
+        <strong>${esc(r.name)}</strong><span class="pill ${cls}">${esc(r.status)}</span>
+      </div>
+      <div style="margin-top:6px; color:var(--muted); font-size:12px;">${esc(r.message)}</div>
+    `;
+    body.appendChild(div);
+  });
+}
+$('#doctor-refresh').addEventListener('click', loadDoctor);
 
 // =========================================================================
 // CONFIG

@@ -224,6 +224,107 @@ def test_skills_list_and_forget(project):
 
 
 # ---------------------------------------------------------------------------
+# council -- shares the same busy lock as run/explore
+# ---------------------------------------------------------------------------
+
+
+def test_start_council_streams_progress_and_the_final_answer(project, monkeypatch):
+    def _fake_run_council(question, models, lead_model, full_registry, **kwargs):
+        print(f"[{models[0]}] done")
+        return "the synthesized answer"
+
+    monkeypatch.setattr(task_session_module, "run_council", _fake_run_council)
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.post("/api/council", json={"question": "should we migrate?", "models": "anthropic:claude-sonnet-5"})
+    assert res.status_code == 200
+    task_id = res.get_json()["task_id"]
+
+    session = app.task_sessions[task_id]
+    events = _drain(session.outbox)
+    lines = [e["text"] for e in events if e["type"] == "log"]
+    assert "the synthesized answer" in lines
+    assert not STDOUT_CAPTURE_LOCK.locked()
+
+
+def test_start_council_requires_question_and_models(project):
+    app = create_app(project, None, None)
+    res = app.test_client().post("/api/council", json={"question": "x", "models": ""})
+    assert res.status_code == 400
+
+
+def test_start_council_also_blocked_by_a_concurrent_run(project, monkeypatch):
+    def _fake_run_autonomous(*args, **kwargs):
+        time.sleep(0.3)
+
+    monkeypatch.setattr(task_session_module, "run_autonomous", _fake_run_autonomous)
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    first = client.post("/api/run", json={"task": "fix the bug"})
+    assert first.status_code == 200
+
+    second = client.post("/api/council", json={"question": "x", "models": "anthropic:claude-sonnet-5"})
+    assert second.status_code == 409
+
+    session = app.task_sessions[first.get_json()["task_id"]]
+    _drain(session.outbox)
+
+
+# ---------------------------------------------------------------------------
+# checkpoints -- branch-from
+# ---------------------------------------------------------------------------
+
+
+def test_branch_from_checkpoint_endpoint(project):
+    checkpoint_manager = CheckpointManager(project)
+    entry = checkpoint_manager.snapshot([], trigger="manual")
+
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.post(f"/api/checkpoints/{entry['id']}/branch-from", json={"branch_name": "experiment-1"})
+    assert res.status_code == 200
+    assert res.get_json()["ok"] is True
+
+    bad = client.post(f"/api/checkpoints/does-not-exist/branch-from", json={"branch_name": "x"})
+    assert bad.status_code == 400
+
+
+def test_branch_from_checkpoint_requires_a_branch_name(project):
+    checkpoint_manager = CheckpointManager(project)
+    entry = checkpoint_manager.snapshot([], trigger="manual")
+
+    app = create_app(project, None, None)
+    res = app.test_client().post(f"/api/checkpoints/{entry['id']}/branch-from", json={})
+    assert res.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# models / doctor
+# ---------------------------------------------------------------------------
+
+
+def test_models_endpoint_lists_real_provider_capabilities(project):
+    app = create_app(project, None, None)
+    res = app.test_client().get("/api/models")
+    assert res.status_code == 200
+    rows = res.get_json()
+    assert len(rows) > 0
+    assert "provider" in rows[0] and "model" in rows[0]
+
+
+def test_doctor_endpoint_reports_diagnostics_without_live_calls(project):
+    app = create_app(project, None, None)
+    res = app.test_client().get("/api/doctor")
+    assert res.status_code == 200
+    rows = res.get_json()
+    assert len(rows) > 0
+    assert all("status" in r and "name" in r and "message" in r for r in rows)
+
+
+# ---------------------------------------------------------------------------
 # usage
 # ---------------------------------------------------------------------------
 
