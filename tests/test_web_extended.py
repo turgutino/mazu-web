@@ -45,12 +45,14 @@ def _release_stray_lock():
         STDOUT_CAPTURE_LOCK.release()
 
 
-def _drain(session, timeout=5):
+def _drain(session, timeout=10):
     """Waits for the session's outbox to emit "done", then joins its background
     thread -- not just draining the queue. An unjoined thread can still be
     mid-exit (closing stores, releasing the lock) when the test returns; see
     ChatSession.join's docstring for why a lingering thread reading process-
     global state (Path.home()) is a real cross-test hazard, not just untidy.
+    10s, not 5s: Windows CI runners have repeatedly (seen live) taken long enough
+    on these background-thread tests to exceed a 5s window.
     """
     deadline = time.time() + timeout
     events = []

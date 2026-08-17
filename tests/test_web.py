@@ -39,7 +39,12 @@ def _end_turn_stream(messages, system, tools, on_delta, model=None):
     return AgentResponse(stop_reason="end_turn", content=[{"type": "text", "text": "hello there"}], usage={})
 
 
-def _wait_for(outbox, event_type, timeout=5):
+def _wait_for(outbox, event_type, timeout=10):
+    # 10s, not 5s: Windows CI runners have repeatedly (seen live, not
+    # hypothetical) taken long enough on these background-thread queue tests to
+    # exceed a 5s window, even with everything mocked at the run_turn_stream
+    # layer -- not specific to any one test, so widened globally here rather than
+    # bumping timeouts test-by-test as each one happens to flake.
     deadline = time.time() + timeout
     seen = []
     while time.time() < deadline:
