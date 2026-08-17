@@ -59,6 +59,9 @@ def test_chat_start_creates_a_session_and_returns_the_resolved_model(project):
     assert data["session_id"] in app.sessions
     assert "model" in data
 
+    app.sessions[data["session_id"]].close()
+    app.sessions[data["session_id"]].join(timeout=5)
+
 
 def test_chat_message_streams_deltas_and_ends_the_turn(project, monkeypatch):
     monkeypatch.setattr(chat_session_module, "run_turn_stream", _end_turn_stream)
@@ -76,6 +79,9 @@ def test_chat_message_streams_deltas_and_ends_the_turn(project, monkeypatch):
 
     done_event, _ = _wait_for(session.outbox, "turn_done")
     assert done_event["type"] == "turn_done"
+
+    session.close()
+    session.join(timeout=5)
 
 
 def test_destructive_tool_call_blocks_on_confirm_and_resumes_on_approval(project, monkeypatch):
@@ -107,6 +113,9 @@ def test_destructive_tool_call_blocks_on_confirm_and_resumes_on_approval(project
 
     _wait_for(session.outbox, "turn_done")
     assert calls["n"] == 2  # declined, but the loop continued with the tool_result
+
+    session.close()
+    session.join(timeout=5)
 
 
 def test_checkpoints_endpoint_lists_real_checkpoints(project):

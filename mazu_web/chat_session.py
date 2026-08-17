@@ -73,6 +73,20 @@ class ChatSession:
         self._closed = True
         self.inbox.put("__mazu_web_close__")
 
+    def join(self, timeout: float | None = None) -> None:
+        """Waits for the background thread to actually exit. Not needed in
+        production (the thread is a daemon; the process exiting is enough), but
+        real test hygiene: this thread reads Path.home() -- the process-global HOME
+        env var -- inside _run(). pytest's monkeypatch.setenv("HOME", ...) reverts
+        at test teardown; an unjoined thread left running past its own test's end
+        can still be mid-_run() when the NEXT test's fixture repoints HOME to a
+        different tmp_path, corrupting that unrelated test in flaky, hard-to-
+        reproduce ways (caught via a real, intermittent CI failure -- a `git add -A`
+        in a completely different test's fixture failing with exit 128 for no
+        reason connected to that test's own code).
+        """
+        self._thread.join(timeout=timeout)
+
     # -- background thread ---------------------------------------------------
 
     def _run(self) -> None:

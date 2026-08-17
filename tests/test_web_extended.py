@@ -45,13 +45,21 @@ def _release_stray_lock():
         STDOUT_CAPTURE_LOCK.release()
 
 
-def _drain(outbox, timeout=5):
+def _drain(session, timeout=5):
+    """Waits for the session's outbox to emit "done", then joins its background
+    thread -- not just draining the queue. An unjoined thread can still be
+    mid-exit (closing stores, releasing the lock) when the test returns; see
+    ChatSession.join's docstring for why a lingering thread reading process-
+    global state (Path.home()) is a real cross-test hazard, not just untidy.
+    """
     deadline = time.time() + timeout
     events = []
+    outbox = session.outbox
     while time.time() < deadline:
         event = outbox.get(timeout=max(0.01, deadline - time.time()))
         events.append(event)
         if event["type"] == "done":
+            session.join(timeout=5)
             return events
     raise AssertionError(f"never saw done, saw {events}")
 
@@ -75,7 +83,7 @@ def test_start_run_streams_captured_print_output_and_releases_the_lock(project, 
     task_id = res.get_json()["task_id"]
 
     session = app.task_sessions[task_id]
-    events = _drain(session.outbox)
+    events = _drain(session)
     lines = [e["text"] for e in events if e["type"] == "log"]
     assert lines == ["step 1", "done"]
     assert not STDOUT_CAPTURE_LOCK.locked()
@@ -99,7 +107,7 @@ def test_start_run_rejects_a_second_concurrent_run(project, monkeypatch):
     assert second.status_code == 409
 
     session = app.task_sessions[first.get_json()["task_id"]]
-    _drain(session.outbox)
+    _drain(session)
 
 
 def test_start_run_requires_a_task(project):
@@ -128,7 +136,7 @@ def test_start_explore_streams_the_formatted_report(project, monkeypatch):
     task_id = res.get_json()["task_id"]
 
     session = app.task_sessions[task_id]
-    events = _drain(session.outbox)
+    events = _drain(session)
     lines = [e["text"] for e in events if e["type"] == "log"]
     assert "[cost] some progress line" in lines
     assert "RANKED REPORT" in lines
@@ -153,7 +161,7 @@ def test_tasks_busy_endpoint_reflects_lock_state(project, monkeypatch):
     assert client.get("/api/tasks/busy").get_json()["busy"] is True
 
     session = app.task_sessions[res.get_json()["task_id"]]
-    _drain(session.outbox)
+    _drain(session)
     assert client.get("/api/tasks/busy").get_json()["busy"] is False
 
 
@@ -243,7 +251,7 @@ def test_start_council_streams_progress_and_the_final_answer(project, monkeypatc
     task_id = res.get_json()["task_id"]
 
     session = app.task_sessions[task_id]
-    events = _drain(session.outbox)
+    events = _drain(session)
     lines = [e["text"] for e in events if e["type"] == "log"]
     assert "the synthesized answer" in lines
     assert not STDOUT_CAPTURE_LOCK.locked()
@@ -270,7 +278,7 @@ def test_start_council_also_blocked_by_a_concurrent_run(project, monkeypatch):
     assert second.status_code == 409
 
     session = app.task_sessions[first.get_json()["task_id"]]
-    _drain(session.outbox)
+    _drain(session)
 
 
 # ---------------------------------------------------------------------------

@@ -73,6 +73,13 @@ class RunSession:
         )
         self._thread.start()
 
+    def join(self, timeout: float | None = None) -> None:
+        """Waits for the background thread to exit -- see ChatSession.join's
+        docstring for why this matters (Path.home() reads process-global state a
+        lingering unjoined thread could touch after a test's fixture has already
+        moved on to a different tmp_path)."""
+        self._thread.join(timeout=timeout)
+
     def _run(self, root, task, model, max_steps, allow_shell, max_cost) -> None:
         session_id = str(uuid.uuid4())
         memory_store = MemoryStore(root / ".mazu" / "memory.db")
@@ -129,6 +136,9 @@ class ExploreSession:
         )
         self._thread.start()
 
+    def join(self, timeout: float | None = None) -> None:
+        self._thread.join(timeout=timeout)
+
     def _run(self, root, task, models, test_command, max_cost, max_steps) -> None:
         checkpoint_manager = CheckpointManager(root)
         writer = _QueueWriter(self.outbox)
@@ -171,6 +181,9 @@ class CouncilSession:
             target=self._run, args=(root, question, models, lead_model, max_cost), daemon=True
         )
         self._thread.start()
+
+    def join(self, timeout: float | None = None) -> None:
+        self._thread.join(timeout=timeout)
 
     def _run(self, root, question, models, lead_model, max_cost) -> None:
         session_id = str(uuid.uuid4())
