@@ -19,19 +19,17 @@ def _parse_shell_allowlist(raw: str | None) -> list[str] | None:
     help="Comma-separated program names shell tool calls are restricted to, same as `mazu chat --shell-allowlist`.",
 )
 def main(host: str, port: int, model: str | None, shell_allowlist: str | None) -> None:
-    """Launch a local browser UI for Mazu: chat (streamed, same rules as `mazu chat`),
-    plus read-only Checkpoints/Memory/Router tabs. Requires the current directory to
-    already be a Mazu project (`mazu init` first, from the core `mazu` package).
-    Binds to localhost only by default -- there is no authentication, so do not
-    expose --host beyond your own machine.
+    """Launch a local browser UI for Mazu: chat, run, explore, council, checkpoints,
+    memory, skills, runs, router, usage, action log, models, doctor, and config --
+    the full terminal command surface. Works against a directory that isn't a Mazu
+    project yet, too -- an Init/Setup banner in the browser handles that the same
+    way `mazu init`/`mazu setup` would from the terminal. Binds to localhost only
+    by default -- there is no authentication, so do not expose --host beyond your
+    own machine.
     """
     from mazu_web.app import create_app
 
     root = Path.cwd()
-    if not (root / ".mazu").exists():
-        click.echo("No .mazu/ here yet -- run `mazu init` first.")
-        return
-
     app = create_app(root, model, _parse_shell_allowlist(shell_allowlist))
     click.echo(f"mazu-web running at http://{host}:{port} (Ctrl+C to stop)")
     app.run(host=host, port=port, threaded=True)

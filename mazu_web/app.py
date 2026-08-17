@@ -5,8 +5,8 @@ from pathlib import Path
 
 from mazu.action_log.store import ActionLogStore
 from mazu.checkpoint.manager import CheckpointManager
-from mazu.config import _SECRET_CONFIG_KEYS, list_config, set_config_value
-from mazu.diagnostics import run_diagnostics
+from mazu.config import _SECRET_CONFIG_KEYS, config_path, list_config, set_config_value
+from mazu.diagnostics import check_live_api_key, ensure_gitignore, run_diagnostics
 from mazu.llm.capabilities import list_capabilities
 from mazu.memory.consolidate import apply_consolidation, find_duplicate_clusters
 from mazu.memory.retrieval import explain_retrieval
@@ -57,6 +57,82 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
     @app.get("/")
     def index():
         return send_from_directory(STATIC_DIR, "index.html")
+
+    # -- status / init / setup ---------------------------------------------
+
+    @app.get("/api/status")
+    def status():
+        return jsonify({
+            "root": str(root),
+            "initialized": (root / ".mazu").exists(),
+            "is_git_repo": (root / ".git").exists(),
+        })
+
+    @app.post("/api/init")
+    def init_project():
+        # Mirrors mazu/cli.py's `init` command exactly (same three steps, same
+        # idempotency -- safe to call again on an already-initialized project).
+        already_existed = (root / ".mazu").exists()
+        memory_store = MemoryStore(root / ".mazu" / "memory.db")
+        memory_store.close()
+        ensure_gitignore(root)
+
+        checkpoint_manager = CheckpointManager(root)
+        was_git_repo = checkpoint_manager.is_git_repo()
+        checkpoint_manager.ensure_git_repo()
+
+        return jsonify({
+            "ok": True,
+            "already_initialized": already_existed,
+            "initialized_git_repo": not was_git_repo,
+        })
+
+    @app.post("/api/setup")
+    def setup():
+        # Non-interactive equivalent of `mazu setup`'s wizard: same three actions
+        # (save key, optionally verify live, optionally set as default model), just
+        # taking them as one request body instead of a sequence of click.prompt()s.
+        from mazu.llm.client import _PROVIDER_DEFAULT_MODELS, _PROVIDERS
+
+        body = request.get_json(silent=True) or {}
+        provider_name = body.get("provider")
+        api_key = body.get("api_key")
+        if provider_name not in _PROVIDERS or not api_key:
+            return jsonify({"error": "provider (one of: " + ", ".join(_PROVIDERS) + ") and api_key are required"}), 400
+
+        set_config_value(f"{provider_name}_api_key", api_key)
+        result = {"ok": True, "saved_to": str(config_path())}
+
+        if body.get("verify"):
+            import os
+
+            env_var = _PROVIDERS[provider_name].api_key_env
+            os.environ[env_var] = api_key
+            check = check_live_api_key(provider_name, _PROVIDER_DEFAULT_MODELS[provider_name])
+            result["verify"] = {"status": check.status, "message": check.message}
+
+        if body.get("set_default"):
+            default_model_choice = _PROVIDER_DEFAULT_MODELS[provider_name]
+            set_config_value("default_model", default_model_choice)
+            result["default_model"] = default_model_choice
+
+        # Unconditional and idempotent (same as /api/init), not gated on whether
+        # root/.mazu already "looks" initialized -- that check is unreliable here
+        # specifically because set_config_value() above may have just created
+        # ~/.mazu itself, which is the SAME directory as root/.mazu whenever HOME
+        # and the project root coincide (the common case in this project's own
+        # test fixtures, and for a real user running mazu-web from their home
+        # directory) -- a false "already initialized" that skipped the real
+        # per-project init steps (memory.db, gitignore, git repo) entirely.
+        was_already_git_repo = (root / ".git").exists()
+        memory_store = MemoryStore(root / ".mazu" / "memory.db")
+        memory_store.close()
+        ensure_gitignore(root)
+        checkpoint_manager = CheckpointManager(root)
+        checkpoint_manager.ensure_git_repo()
+        result["initialized_project"] = not was_already_git_repo
+
+        return jsonify(result)
 
     # -- chat -----------------------------------------------------------
 

@@ -6,12 +6,18 @@ Ships as its own package (`mazu-web`, console script `mazu-web`) so Mazu's core 
 
 ## What it does
 
-- **Chat** -- the same turn logic as `mazu chat` (same system prompt, same tools, same destructive-tool confirmation rules), streamed over Server-Sent Events instead of printed to a terminal.
-- **Checkpoints** -- browse the timeline, roll back with one click (same `checkpoint_manager.restore()` the CLI's `mazu rollback` uses).
-- **Memory** -- browse everything the agent has remembered for this project.
-- **Router** -- the same win-rate/cost stats as `mazu router stats`, filterable by task type.
+Full parity with the terminal command surface -- every route calls straight into the same `mazu` package classes (`CheckpointManager`, `MemoryStore`, `RunStore`, the router, `run_autonomous`, `run_explore`, `run_council`, diagnostics) the CLI itself uses. This UI is a different way to reach the same operations, not a second implementation of them.
 
-Nothing here is a second implementation of Mazu's core logic -- every route calls straight into the same `mazu` package classes (`CheckpointManager`, `MemoryStore`, `RunStore`, the router) the CLI itself uses. This UI is a different way to reach the same operations, not a fork of them.
+- **Chat** -- the same turn logic as `mazu chat`, streamed over Server-Sent Events instead of printed to a terminal.
+- **Run** -- one-shot autonomous tasks (`mazu run`), streamed.
+- **Explore** -- parallel branch comparison (`mazu explore`), streamed.
+- **Council** -- ask multiple models independently, one lead synthesizes (`mazu council`), streamed.
+- **Checkpoints** -- timeline, diff, compare, inspect, prune, branch-from, and one-click rollback.
+- **Memory** -- search, pin/unpin, edit, forget, stats, "why would this retrieve", find/merge duplicates.
+- **Skills**, **Runs** (+ compare-branches), **Router**, **Usage**, **Action log**, **Models**, **Doctor**, **Config** -- all full read (and write, where the CLI itself allows it).
+- **Init / Setup** -- works against a directory that isn't a Mazu project yet; an in-page banner and a Config-tab form do what `mazu init`/`mazu setup` would from the terminal.
+
+Run and Explore and Council share one server-wide lock: all three wrap print()-only agent functions via `sys.stdout` redirection, which is process-global, not thread-local -- two concurrent captures would corrupt each other's output. Starting a second one while the first is still running gets a 409, not a silently queued mess.
 
 ## Install
 
@@ -19,14 +25,12 @@ Nothing here is a second implementation of Mazu's core logic -- every route call
 pip install "mazu-web @ git+https://github.com/turgutino/mazu-web.git"
 ```
 
-Requires an existing Mazu project (`mazu init` first, from the core [`mazu`](https://github.com/turgutino/Mazu) package -- installed automatically as a dependency of this package).
-
-Once the core `mazu` package is published to PyPI, this package's dependency will switch from a git URL to a normal version pin.
+Depends on the core [`mazu`](https://github.com/turgutino/Mazu) package, installed automatically. Once `mazu` is published to PyPI, this package's dependency will switch from a git URL to a normal version pin.
 
 ## Run
 
 ```bash
-cd your-project        # already `mazu init`-ed
+cd your-project        # doesn't need to be `mazu init`-ed first -- the browser handles that
 mazu-web                # http://127.0.0.1:8765
 ```
 

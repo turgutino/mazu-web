@@ -174,6 +174,11 @@
 </aside>
 
 <main>
+  <div id="init-banner" class="warn-banner" style="display:none; margin:16px 24px 0; justify-content:space-between; align-items:center;">
+    <span>This directory isn't a Mazu project yet.</span>
+    <button class="btn small" id="init-banner-btn">Initialize now</button>
+  </div>
+
   <!-- CHAT -->
   <section id="tab-chat" class="tab active">
     <div id="chat-log"></div>
@@ -340,6 +345,22 @@
   <section id="tab-config" class="tab">
     <div class="tab-header"><h1>Config</h1><span class="hint">~/.mazu/config.toml</span></div>
     <div class="tab-body">
+      <div class="card" style="max-width:480px; margin-bottom:20px;">
+        <h3>Quick setup</h3>
+        <div class="field"><label>Provider</label>
+          <select id="setup-provider">
+            <option value="anthropic">anthropic</option>
+            <option value="openai">openai</option>
+            <option value="deepseek">deepseek</option>
+            <option value="gemini">gemini</option>
+          </select>
+        </div>
+        <div class="field"><label>API key</label><input type="password" id="setup-key"></div>
+        <div class="checkbox-row"><input type="checkbox" id="setup-verify" checked><label for="setup-verify">Verify with a real API call</label></div>
+        <div class="checkbox-row"><input type="checkbox" id="setup-default" checked><label for="setup-default">Set as default model</label></div>
+        <button class="btn" id="setup-btn">Save</button>
+        <div id="setup-result" style="margin-top:10px; font-size:12px;"></div>
+      </div>
       <div id="config-body" class="empty">Loading...</div>
       <div class="card" style="max-width:480px; margin-top:20px;">
         <h3>Set a value</h3>
@@ -349,10 +370,10 @@
             <option value="router_suggestions">router_suggestions</option>
             <option value="local_base_url">local_base_url</option>
             <option value="api_key">api_key</option>
-            <option value="ANTHROPIC_API_KEY">ANTHROPIC_API_KEY</option>
-            <option value="OPENAI_API_KEY">OPENAI_API_KEY</option>
-            <option value="DEEPSEEK_API_KEY">DEEPSEEK_API_KEY</option>
-            <option value="GEMINI_API_KEY">GEMINI_API_KEY</option>
+            <option value="anthropic_api_key">anthropic_api_key</option>
+            <option value="openai_api_key">openai_api_key</option>
+            <option value="deepseek_api_key">deepseek_api_key</option>
+            <option value="gemini_api_key">gemini_api_key</option>
           </select>
         </div>
         <div class="field"><label>Value</label><input type="text" id="config-value"></div>
@@ -396,6 +417,18 @@ async function pollBusy() {
 }
 setInterval(pollBusy, 2000);
 pollBusy();
+
+// -- project status / init banner ----------------------------------------
+async function checkStatus() {
+  const data = await (await fetch('/api/status')).json();
+  $('#init-banner').style.display = data.initialized ? 'none' : 'flex';
+  return data;
+}
+$('#init-banner-btn').addEventListener('click', async () => {
+  await fetch('/api/init', {method: 'POST'});
+  checkStatus();
+});
+checkStatus();
 
 // =========================================================================
 // CHAT
@@ -1055,6 +1088,31 @@ $('#config-set').addEventListener('click', async () => {
   if (!res.ok) { alert(data.error); return; }
   $('#config-value').value = '';
   loadConfig();
+});
+
+$('#setup-btn').addEventListener('click', async () => {
+  const provider = $('#setup-provider').value;
+  const api_key = $('#setup-key').value;
+  const resultEl = $('#setup-result');
+  if (!api_key) { resultEl.textContent = 'Enter an API key first.'; return; }
+  resultEl.textContent = 'Saving...';
+  const res = await fetch('/api/setup', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      provider, api_key,
+      verify: $('#setup-verify').checked,
+      set_default: $('#setup-default').checked,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) { resultEl.textContent = data.error; return; }
+  let msg = `Saved to ${data.saved_to}.`;
+  if (data.verify) msg += ` Verify: [${data.verify.status}] ${data.verify.message}`;
+  if (data.default_model) msg += ` Default model set to ${data.default_model}.`;
+  resultEl.textContent = msg;
+  $('#setup-key').value = '';
+  loadConfig();
+  checkStatus();
 });
 </script>
 </body>
