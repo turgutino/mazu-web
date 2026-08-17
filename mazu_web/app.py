@@ -182,17 +182,40 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
 
     @app.post("/api/run")
     def start_run():
+        # Same validation as mazu/cli.py's `run` command (UsageError -> 400 here).
         body = request.get_json(silent=True) or {}
-        task = (body.get("task") or "").strip()
-        if not task:
-            return jsonify({"error": "task is required"}), 400
+        task = (body.get("task") or "").strip() or None
+        resume_run_id = body.get("resume") or None
+        from_checkpoint_id = body.get("from_checkpoint") or None
+        branch_name = body.get("branch") or None
+
+        if from_checkpoint_id is not None and resume_run_id is not None:
+            return jsonify({"error": "Pass either from_checkpoint or resume, not both."}), 400
+        if branch_name is not None and from_checkpoint_id is None:
+            return jsonify({"error": "branch requires from_checkpoint."}), 400
+        if from_checkpoint_id is not None and not branch_name:
+            return jsonify({"error": "from_checkpoint requires branch (a new branch name)."}), 400
+        if from_checkpoint_id is not None and task is None:
+            return jsonify({"error": "from_checkpoint requires a task to run on the new branch."}), 400
+        if resume_run_id is None and from_checkpoint_id is None and task is None:
+            return jsonify({"error": "task is required (or pass resume / from_checkpoint+branch)."}), 400
+        if resume_run_id is not None and task is not None:
+            return jsonify({"error": "Pass either a new task or resume, not both."}), 400
+
         payload, status = _start_task(
             "run",
             lambda: RunSession(
                 root=root, task=task, model=body.get("model") or model,
                 max_steps=int(body.get("max_steps") or 15),
+                checkpoint_every=int(body.get("checkpoint_every") or 1),
                 allow_shell=bool(body.get("allow_shell", False)),
+                keep_checkpoints=body.get("keep_checkpoints"),
                 max_cost=body.get("max_cost"),
+                shell_allowlist=body.get("shell_allowlist") or None,
+                dry_run=bool(body.get("dry_run", False)),
+                resume_run_id=resume_run_id,
+                from_checkpoint_id=from_checkpoint_id,
+                branch_name=branch_name,
             ),
         )
         return jsonify(payload), status
@@ -201,9 +224,25 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
     def start_explore():
         body = request.get_json(silent=True) or {}
         task = (body.get("task") or "").strip()
-        models = [m.strip() for m in (body.get("models") or "").split(",") if m.strip()]
-        if not task or not models:
-            return jsonify({"error": "task and at least one model are required"}), 400
+        if not task:
+            return jsonify({"error": "task is required"}), 400
+
+        if body.get("auto_models"):
+            # Same picker `mazu explore --auto-models` uses: this project's own
+            # router history for this kind of task, topped up with one model per
+            # other available provider. Reused directly, not reimplemented.
+            from mazu.cli import _auto_pick_models
+
+            approaches = int(body.get("approaches") or 2)
+            try:
+                models = _auto_pick_models(root, task, approaches)
+            except Exception as e:
+                return jsonify({"error": str(e)}), 400
+        else:
+            models = [m.strip() for m in (body.get("models") or "").split(",") if m.strip()]
+            if not models:
+                return jsonify({"error": "models is required unless auto_models is set"}), 400
+
         payload, status = _start_task(
             "explore",
             lambda: ExploreSession(
@@ -211,18 +250,23 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
                 test_command=body.get("test_command") or None,
                 max_cost=body.get("max_cost"),
                 max_steps=int(body.get("max_steps") or 15),
+                from_checkpoint_id=body.get("from_checkpoint") or None,
             ),
         )
         return jsonify(payload), status
 
     @app.post("/api/council")
     def start_council():
+        # Same defaults as `mazu council` itself, not an ad-hoc web-only fallback.
+        from mazu.cli import DEFAULT_COUNCIL_LEAD, DEFAULT_COUNCIL_MODELS
+
         body = request.get_json(silent=True) or {}
         question = (body.get("question") or "").strip()
-        models = [m.strip() for m in (body.get("models") or "").split(",") if m.strip()]
-        lead_model = (body.get("lead_model") or "").strip() or (models[0] if models else None)
-        if not question or not models or not lead_model:
-            return jsonify({"error": "question and at least one model are required"}), 400
+        models_raw = body.get("models") or DEFAULT_COUNCIL_MODELS
+        models = [m.strip() for m in models_raw.split(",") if m.strip()]
+        lead_model = (body.get("lead_model") or "").strip() or DEFAULT_COUNCIL_LEAD
+        if not question or not models:
+            return jsonify({"error": "question is required"}), 400
         payload, status = _start_task(
             "council",
             lambda: CouncilSession(

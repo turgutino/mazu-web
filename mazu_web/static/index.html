@@ -193,14 +193,31 @@
     <div class="tab-header"><h1>Run</h1><span class="hint">One-shot autonomous task (mazu run)</span></div>
     <div class="tab-body" style="display:flex; flex-direction:column; gap:16px; height:100%;">
       <div class="card">
-        <div class="field"><label>Task</label><textarea id="run-task" rows="2" placeholder="Fix the bug in parser.py"></textarea></div>
+        <div class="field"><label>Task (leave empty to use Resume below)</label><textarea id="run-task" rows="2" placeholder="Fix the bug in parser.py"></textarea></div>
         <div class="field-row">
           <div class="field"><label>Max steps</label><input type="number" id="run-max-steps" value="15"></div>
+          <div class="field"><label>Checkpoint every N steps</label><input type="number" id="run-checkpoint-every" value="1"></div>
           <div class="field"><label>Max cost (USD, optional)</label><input type="number" id="run-max-cost" step="0.01" placeholder="unset"></div>
           <div class="field"><label>Model (optional)</label><input type="text" id="run-model" placeholder="auto"></div>
         </div>
+        <div class="field-row">
+          <div class="field"><label>Keep last N checkpoints (optional)</label><input type="number" id="run-keep-checkpoints" placeholder="default: 50"></div>
+          <div class="field"><label>Shell allowlist (optional, comma-separated)</label><input type="text" id="run-shell-allowlist" placeholder="git,npm,pytest"></div>
+        </div>
         <div class="checkbox-row"><input type="checkbox" id="run-allow-shell"><label for="run-allow-shell">Allow shell (skip confirmation)</label></div>
+        <div class="checkbox-row"><input type="checkbox" id="run-dry-run"><label for="run-dry-run">Dry run (plan only, no writes/checkpoints)</label></div>
         <button class="btn" id="run-start">Start Run</button>
+
+        <h3 style="margin-top:18px;">Resume an earlier run</h3>
+        <div class="field"><label>Run id</label><input type="text" id="run-resume-id" placeholder="reuses that run's original task/model/options"></div>
+        <button class="btn ghost small" id="run-resume-start">Resume</button>
+
+        <h3 style="margin-top:18px;">Fork from a checkpoint (new branch)</h3>
+        <div class="field-row">
+          <div class="field"><label>Checkpoint id</label><input type="text" id="run-fork-checkpoint" placeholder="cp_000003"></div>
+          <div class="field"><label>New branch name</label><input type="text" id="run-fork-branch" placeholder="my-experiment"></div>
+        </div>
+        <button class="btn ghost small" id="run-fork-start">Fork &amp; Run (uses Task above)</button>
       </div>
       <div id="run-log" class="mono-block" style="flex:1;"></div>
     </div>
@@ -213,12 +230,17 @@
       <div class="warn-banner">Runs N full autonomous agents in parallel with shell forced on. Expect roughly Nx the cost of a single run.</div>
       <div class="card">
         <div class="field"><label>Task</label><textarea id="explore-task" rows="2" placeholder="Fix the intermittent test failure"></textarea></div>
-        <div class="field"><label>Models (comma-separated)</label><input type="text" id="explore-models" placeholder="anthropic:claude-sonnet-5,deepseek:deepseek-chat"></div>
+        <div class="field"><label>Models (comma-separated -- ignored if Auto-models is checked)</label><input type="text" id="explore-models" placeholder="anthropic:claude-sonnet-5,deepseek:deepseek-chat"></div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="explore-auto-models"><label for="explore-auto-models">Auto-models (pick from this project's router history)</label>
+          <input type="number" id="explore-approaches" value="2" style="width:70px; margin-left:12px;" title="approaches, used only with auto-models">
+        </div>
         <div class="field-row">
           <div class="field"><label>Test command (optional)</label><input type="text" id="explore-test-command" placeholder="pytest -q"></div>
           <div class="field"><label>Max cost (USD, shared)</label><input type="number" id="explore-max-cost" step="0.01" placeholder="unset"></div>
           <div class="field"><label>Max steps / branch</label><input type="number" id="explore-max-steps" value="15"></div>
         </div>
+        <div class="field" style="max-width:320px;"><label>Fork from checkpoint (optional)</label><input type="text" id="explore-from-checkpoint" placeholder="defaults to most recent"></div>
         <button class="btn" id="explore-start">Start Explore</button>
       </div>
       <div id="explore-log" class="mono-block" style="flex:1;"></div>
@@ -412,6 +434,8 @@ async function pollBusy() {
     $('#busy-dot').classList.toggle('on', data.busy);
     $('#busy-text').textContent = data.busy ? 'busy (run/explore/council)' : 'idle';
     $('#run-start').disabled = data.busy;
+    $('#run-resume-start').disabled = data.busy;
+    $('#run-fork-start').disabled = data.busy;
     $('#explore-start').disabled = data.busy;
     $('#council-start').disabled = data.busy;
   } catch (e) {}
@@ -539,38 +563,74 @@ function streamTask(taskId, logEl) {
   };
 }
 
-$('#run-start').addEventListener('click', async () => {
-  const task = $('#run-task').value.trim();
-  if (!task) return;
+function _runCommonBody() {
   const body = {
-    task,
     max_steps: parseInt($('#run-max-steps').value || '15', 10),
+    checkpoint_every: parseInt($('#run-checkpoint-every').value || '1', 10),
     allow_shell: $('#run-allow-shell').checked,
+    dry_run: $('#run-dry-run').checked,
   };
   const maxCost = $('#run-max-cost').value;
   if (maxCost) body.max_cost = parseFloat(maxCost);
   const model = $('#run-model').value.trim();
   if (model) body.model = model;
+  const keepCheckpoints = $('#run-keep-checkpoints').value;
+  if (keepCheckpoints) body.keep_checkpoints = parseInt(keepCheckpoints, 10);
+  const shellAllowlist = $('#run-shell-allowlist').value.trim();
+  if (shellAllowlist) body.shell_allowlist = shellAllowlist;
+  return body;
+}
 
+async function _startRun(body) {
   const res = await fetch('/api/run', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   const data = await res.json();
   if (!res.ok) { $('#run-log').textContent = `[error] ${data.error}`; return; }
   pollBusy();
   streamTask(data.task_id, $('#run-log'));
+}
+
+$('#run-start').addEventListener('click', () => {
+  const task = $('#run-task').value.trim();
+  if (!task) { alert('Enter a task, or use Resume / Fork below.'); return; }
+  _startRun({...(_runCommonBody()), task});
+});
+
+$('#run-resume-start').addEventListener('click', () => {
+  const resumeId = $('#run-resume-id').value.trim();
+  if (!resumeId) return;
+  _startRun({...(_runCommonBody()), resume: resumeId});
+});
+
+$('#run-fork-start').addEventListener('click', () => {
+  const task = $('#run-task').value.trim();
+  const checkpointId = $('#run-fork-checkpoint').value.trim();
+  const branch = $('#run-fork-branch').value.trim();
+  if (!task || !checkpointId || !branch) { alert('Task, checkpoint id, and branch name are all required to fork.'); return; }
+  _startRun({...(_runCommonBody()), task, from_checkpoint: checkpointId, branch});
 });
 
 $('#explore-start').addEventListener('click', async () => {
   const task = $('#explore-task').value.trim();
+  const autoModels = $('#explore-auto-models').checked;
   const models = $('#explore-models').value.trim();
-  if (!task || !models) return;
+  if (!task) return;
+  if (!autoModels && !models) { alert('Enter models, or check Auto-models.'); return; }
   const body = {
-    task, models,
+    task,
     max_steps: parseInt($('#explore-max-steps').value || '15', 10),
   };
+  if (autoModels) {
+    body.auto_models = true;
+    body.approaches = parseInt($('#explore-approaches').value || '2', 10);
+  } else {
+    body.models = models;
+  }
   const testCommand = $('#explore-test-command').value.trim();
   if (testCommand) body.test_command = testCommand;
   const maxCost = $('#explore-max-cost').value;
   if (maxCost) body.max_cost = parseFloat(maxCost);
+  const fromCheckpoint = $('#explore-from-checkpoint').value.trim();
+  if (fromCheckpoint) body.from_checkpoint = fromCheckpoint;
 
   const res = await fetch('/api/explore', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   const data = await res.json();

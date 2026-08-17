@@ -116,6 +116,124 @@ def test_start_run_requires_a_task(project):
     assert res.status_code == 400
 
 
+def test_start_run_rejects_resume_and_from_checkpoint_together(project):
+    app = create_app(project, None, None)
+    res = app.test_client().post("/api/run", json={"resume": "r1", "from_checkpoint": "cp_000001", "branch": "b"})
+    assert res.status_code == 400
+
+
+def test_start_run_rejects_branch_without_from_checkpoint(project):
+    app = create_app(project, None, None)
+    res = app.test_client().post("/api/run", json={"task": "x", "branch": "b"})
+    assert res.status_code == 400
+
+
+def test_start_run_rejects_from_checkpoint_without_branch(project):
+    app = create_app(project, None, None)
+    res = app.test_client().post("/api/run", json={"task": "x", "from_checkpoint": "cp_000001"})
+    assert res.status_code == 400
+
+
+def test_start_run_from_checkpoint_forks_a_new_branch_and_runs(project, monkeypatch):
+    checkpoint_manager = CheckpointManager(project)
+    entry = checkpoint_manager.snapshot([{"role": "user", "content": "hi"}], trigger="manual")
+
+    captured = {}
+
+    def _fake_run_autonomous(registry, task, session_id, cm, **kwargs):
+        captured["task"] = task
+        captured["origin_checkpoint_id"] = kwargs.get("origin_checkpoint_id")
+        captured["branch_name"] = kwargs.get("branch_name")
+        captured["resume_messages"] = kwargs.get("resume_messages")
+        print("ran on fork")
+
+    monkeypatch.setattr(task_session_module, "run_autonomous", _fake_run_autonomous)
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.post("/api/run", json={
+        "task": "fix it on a branch", "from_checkpoint": entry["id"], "branch": "web-fork-branch",
+    })
+    assert res.status_code == 200
+    session = app.task_sessions[res.get_json()["task_id"]]
+    events = _drain(session)
+    lines = [e["text"] for e in events if e["type"] == "log"]
+    assert any("Forked from" in line for line in lines)
+    assert "ran on fork" in lines
+    assert captured["task"] == "fix it on a branch"
+    assert captured["origin_checkpoint_id"] == entry["id"]
+    assert captured["branch_name"] == "web-fork-branch"
+    assert captured["resume_messages"] == [{"role": "user", "content": "hi"}]
+
+
+def test_start_run_resume_reuses_the_original_runs_config(project, monkeypatch):
+    checkpoint_manager = CheckpointManager(project)
+    run_store = RunStore(project / ".mazu" / "runs.db")
+    run_store.start("run-1", "the original task", "deepseek:deepseek-chat", 7, 2, True, ["git", "npm"], 0.5, False)
+    run_store.close()
+    checkpoint_manager.snapshot([{"role": "assistant", "content": "ok"}], trigger="manual", session_id="run-1")
+
+    captured = {}
+
+    def _fake_run_autonomous(registry, task, session_id, cm, **kwargs):
+        captured["task"] = task
+        captured["session_id"] = session_id
+        captured["max_steps"] = kwargs.get("max_steps")
+        captured["checkpoint_every"] = kwargs.get("checkpoint_every")
+        captured["allow_shell"] = kwargs.get("allow_shell")
+        captured["shell_allowlist"] = kwargs.get("shell_allowlist")
+        captured["max_cost"] = kwargs.get("max_cost")
+        print("resumed")
+
+    monkeypatch.setattr(task_session_module, "run_autonomous", _fake_run_autonomous)
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.post("/api/run", json={"resume": "run-1"})
+    assert res.status_code == 200
+    session = app.task_sessions[res.get_json()["task_id"]]
+    events = _drain(session)
+    lines = [e["text"] for e in events if e["type"] == "log"]
+    assert any("Resuming run run-1" in line for line in lines)
+    assert captured["task"] == "the original task"
+    assert captured["session_id"] == "run-1"
+    assert captured["max_steps"] == 7
+    assert captured["checkpoint_every"] == 2
+    assert captured["allow_shell"] is True
+    assert captured["shell_allowlist"] == ["git", "npm"]
+    assert captured["max_cost"] == 0.5
+
+
+def test_start_run_resume_reports_missing_run(project):
+    app = create_app(project, None, None)
+    client = app.test_client()
+    res = client.post("/api/run", json={"resume": "does-not-exist"})
+    assert res.status_code == 200
+    session = app.task_sessions[res.get_json()["task_id"]]
+    events = _drain(session)
+    lines = [e["text"] for e in events if e["type"] == "log"]
+    assert any("No run found with id does-not-exist" in line for line in lines)
+
+
+def test_start_run_passes_dry_run_and_keep_checkpoints_through(project, monkeypatch):
+    captured = {}
+
+    def _fake_run_autonomous(registry, task, session_id, cm, **kwargs):
+        captured["dry_run"] = kwargs.get("dry_run")
+        captured["retention"] = cm.retention
+
+    monkeypatch.setattr(task_session_module, "run_autonomous", _fake_run_autonomous)
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.post("/api/run", json={"task": "x", "dry_run": True, "keep_checkpoints": 5})
+    assert res.status_code == 200
+    session = app.task_sessions[res.get_json()["task_id"]]
+    _drain(session)
+    assert captured["dry_run"] is True
+    assert captured["retention"] == 5
+
+
 def test_start_explore_streams_the_formatted_report(project, monkeypatch):
     def _fake_run_explore(task, models, root, checkpoint_manager, **kwargs):
         print("[cost] some progress line")
@@ -146,6 +264,63 @@ def test_start_explore_requires_task_and_models(project):
     app = create_app(project, None, None)
     res = app.test_client().post("/api/explore", json={"task": "fix it", "models": ""})
     assert res.status_code == 400
+
+
+def test_start_explore_auto_models_reuses_the_cli_picker(project, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "unused-not-real")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    captured = {}
+
+    def _fake_run_explore(task, models, root, checkpoint_manager, **kwargs):
+        captured["models"] = models
+        return []
+
+    monkeypatch.setattr(task_session_module, "run_explore", _fake_run_explore)
+    monkeypatch.setattr(task_session_module, "format_explore_report", lambda results, tc: "")
+    app = create_app(project, None, None)
+
+    res = app.test_client().post("/api/explore", json={"task": "fix the bug", "auto_models": True, "approaches": 1})
+    assert res.status_code == 200
+    session = app.task_sessions[res.get_json()["task_id"]]
+    _drain(session)
+    assert captured["models"] == ["deepseek:deepseek-chat"]
+
+
+def test_start_explore_auto_models_reports_not_enough_distinct_models(project, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    app = create_app(project, None, None)
+    res = app.test_client().post("/api/explore", json={"task": "fix the bug", "auto_models": True, "approaches": 2})
+    assert res.status_code == 400
+    assert "could only find" in res.get_json()["error"]
+
+
+def test_start_explore_passes_from_checkpoint_through(project, monkeypatch):
+    checkpoint_manager = CheckpointManager(project)
+    entry = checkpoint_manager.snapshot([], trigger="manual")
+
+    captured = {}
+
+    def _fake_run_explore(task, models, root, checkpoint_manager, from_checkpoint_id=None, **kwargs):
+        captured["from_checkpoint_id"] = from_checkpoint_id
+        return []
+
+    monkeypatch.setattr(task_session_module, "run_explore", _fake_run_explore)
+    monkeypatch.setattr(task_session_module, "format_explore_report", lambda results, tc: "")
+    app = create_app(project, None, None)
+
+    res = app.test_client().post("/api/explore", json={
+        "task": "fix it", "models": "anthropic:claude-sonnet-5", "from_checkpoint": entry["id"],
+    })
+    assert res.status_code == 200
+    session = app.task_sessions[res.get_json()["task_id"]]
+    _drain(session)
+    assert captured["from_checkpoint_id"] == entry["id"]
 
 
 def test_tasks_busy_endpoint_reflects_lock_state(project, monkeypatch):
@@ -257,10 +432,30 @@ def test_start_council_streams_progress_and_the_final_answer(project, monkeypatc
     assert not STDOUT_CAPTURE_LOCK.locked()
 
 
-def test_start_council_requires_question_and_models(project):
+def test_start_council_requires_a_question(project):
     app = create_app(project, None, None)
-    res = app.test_client().post("/api/council", json={"question": "x", "models": ""})
+    res = app.test_client().post("/api/council", json={"models": "anthropic:claude-sonnet-5"})
     assert res.status_code == 400
+
+
+def test_start_council_falls_back_to_the_cli_defaults_when_models_omitted(project, monkeypatch):
+    from mazu.cli import DEFAULT_COUNCIL_LEAD, DEFAULT_COUNCIL_MODELS
+
+    captured = {}
+
+    def _fake_run_council(question, models, lead_model, full_registry, **kwargs):
+        captured["models"] = models
+        captured["lead_model"] = lead_model
+        return "answer"
+
+    monkeypatch.setattr(task_session_module, "run_council", _fake_run_council)
+    app = create_app(project, None, None)
+    res = app.test_client().post("/api/council", json={"question": "should we migrate?"})
+    assert res.status_code == 200
+    session = app.task_sessions[res.get_json()["task_id"]]
+    _drain(session)
+    assert captured["models"] == DEFAULT_COUNCIL_MODELS.split(",")
+    assert captured["lead_model"] == DEFAULT_COUNCIL_LEAD
 
 
 def test_start_council_also_blocked_by_a_concurrent_run(project, monkeypatch):

@@ -55,21 +55,39 @@ class RunSession:
     thread so the HTTP request that starts it can return immediately; its stdout
     is captured line-by-line into `outbox` for an SSE endpoint to forward.
     Caller must hold STDOUT_CAPTURE_LOCK (non-blocking) before constructing this.
+
+    Mirrors mazu/cli.py's `run` command's full option set (not just the basics):
+    --resume and --from-checkpoint/--branch resolve the same way here as they do
+    there (same validation, same RunStore/CheckpointManager calls) -- this isn't
+    a smaller reimplementation, it's the same logic with click.UsageError swapped
+    for a returned error dict.
     """
 
     def __init__(
         self,
         root: Path,
-        task: str,
+        task: str | None,
         model: str | None,
         max_steps: int,
+        checkpoint_every: int,
         allow_shell: bool,
+        keep_checkpoints: int | None,
         max_cost: float | None,
+        shell_allowlist: list[str] | None,
+        dry_run: bool,
+        resume_run_id: str | None,
+        from_checkpoint_id: str | None,
+        branch_name: str | None,
     ) -> None:
         self.task_id = str(uuid.uuid4())
         self.outbox: "queue.Queue[dict]" = queue.Queue()
         self._thread = threading.Thread(
-            target=self._run, args=(root, task, model, max_steps, allow_shell, max_cost), daemon=True
+            target=self._run,
+            args=(
+                root, task, model, max_steps, checkpoint_every, allow_shell, keep_checkpoints,
+                max_cost, shell_allowlist, dry_run, resume_run_id, from_checkpoint_id, branch_name,
+            ),
+            daemon=True,
         )
         self._thread.start()
 
@@ -80,32 +98,92 @@ class RunSession:
         moved on to a different tmp_path)."""
         self._thread.join(timeout=timeout)
 
-    def _run(self, root, task, model, max_steps, allow_shell, max_cost) -> None:
-        session_id = str(uuid.uuid4())
-        memory_store = MemoryStore(root / ".mazu" / "memory.db")
-        global_memory_store = MemoryStore(Path.home() / ".mazu" / "global_memory.db")
-        skill_manager = SkillManager(root)
-        checkpoint_manager = CheckpointManager(root)
-        usage_store = UsageStore(Path.home() / ".mazu" / "usage.db")
-        run_store = RunStore(root / ".mazu" / "runs.db")
-        registry = build_registry(root, memory_store, global_memory_store, skill_manager, session_id)
-
+    def _run(
+        self, root, task, model, max_steps, checkpoint_every, allow_shell, keep_checkpoints,
+        max_cost, shell_allowlist, dry_run, resume_run_id, from_checkpoint_id, branch_name,
+    ) -> None:
         writer = _QueueWriter(self.outbox)
+        checkpoint_kwargs = {"retention": keep_checkpoints} if keep_checkpoints is not None else {}
+        checkpoint_manager = CheckpointManager(root, **checkpoint_kwargs)
+        run_store = RunStore(root / ".mazu" / "runs.db")
         try:
             with contextlib.redirect_stdout(writer):
-                run_autonomous(
-                    registry, task, session_id, checkpoint_manager,
-                    memory_store=memory_store, global_memory_store=global_memory_store,
-                    skill_manager=skill_manager, max_steps=max_steps, allow_shell=allow_shell,
-                    max_cost=max_cost, model=model, usage_store=usage_store, run_store=run_store,
+                resume_messages = None
+                origin_checkpoint_id = None
+                parent_run_id = None
+
+                if from_checkpoint_id is not None:
+                    origin_entry = checkpoint_manager.show_entry(from_checkpoint_id)
+                    fork_result = checkpoint_manager.fork(origin_entry["id"], branch_name)
+                    origin_checkpoint_id = origin_entry["id"]
+                    parent_run_id = origin_entry.get("session_id")
+                    resume_messages = fork_result["messages"]
+                    print(
+                        f"Forked from {origin_checkpoint_id} onto new branch {branch_name!r} "
+                        f"({len(resume_messages)} prior message(s)). Will run: {task}"
+                    )
+                elif resume_run_id is not None:
+                    run_row = run_store.get(resume_run_id)
+                    if run_row is None:
+                        self.outbox.put({"type": "log", "text": f"No run found with id {resume_run_id}."})
+                        return
+                    checkpoint_entry = checkpoint_manager.latest_for_session(resume_run_id)
+                    if checkpoint_entry is None:
+                        self.outbox.put({
+                            "type": "log",
+                            "text": f"No checkpoint found for run {resume_run_id} -- nothing to resume from.",
+                        })
+                        return
+                    resume_messages = checkpoint_manager.inspect_conversation(checkpoint_entry["id"])
+                    task = run_row["task"]
+                    model = run_row["model"]
+                    max_steps = run_row["max_steps"]
+                    checkpoint_every = run_row["checkpoint_every"]
+                    allow_shell = bool(run_row["allow_shell"])
+                    shell_allowlist = run_row["shell_allowlist"]
+                    max_cost = run_row["max_cost"]
+                    dry_run = bool(run_row["dry_run"])
+                    print(
+                        f"Resuming run {resume_run_id} from {checkpoint_entry['id']} "
+                        f"({len(resume_messages)} prior message(s))."
+                    )
+
+                session_id = resume_run_id if resume_run_id is not None else str(uuid.uuid4())
+                memory_store = MemoryStore(root / ".mazu" / "memory.db")
+                global_memory_store = MemoryStore(Path.home() / ".mazu" / "global_memory.db")
+                skill_manager = SkillManager(root)
+                usage_store = UsageStore(Path.home() / ".mazu" / "usage.db")
+                action_log_store = ActionLogStore(root / ".mazu" / "action_log.db")
+                registry = build_registry(
+                    root, memory_store, global_memory_store, skill_manager, session_id, dry_run=dry_run
                 )
+                # shell_allowlist may be the fresh comma-string request value or a
+                # resumed run's raw DB column (also a comma string, or None) --
+                # parsed into a list once, uniformly, right here, same as the CLI's
+                # own single _parse_shell_allowlist() call right before this.
+                parsed_allowlist = (
+                    [p.strip() for p in shell_allowlist.split(",") if p.strip()] if shell_allowlist else None
+                )
+                try:
+                    run_autonomous(
+                        registry, task, session_id, checkpoint_manager,
+                        memory_store=memory_store, global_memory_store=global_memory_store,
+                        skill_manager=skill_manager, max_steps=max_steps, checkpoint_every=checkpoint_every,
+                        allow_shell=allow_shell, max_cost=max_cost, model=model, usage_store=usage_store,
+                        action_log_store=action_log_store, shell_allowlist=parsed_allowlist, dry_run=dry_run,
+                        run_store=run_store, resume_messages=resume_messages,
+                        origin_checkpoint_id=origin_checkpoint_id, parent_run_id=parent_run_id,
+                        branch_name=branch_name,
+                    )
+                finally:
+                    memory_store.close()
+                    global_memory_store.close()
+                    usage_store.close()
+                    action_log_store.close()
         except Exception as e:
             self.outbox.put({"type": "log", "text": f"[error] {e}"})
         finally:
             writer.flush()
-            memory_store.close()
-            global_memory_store.close()
-            usage_store.close()
             run_store.close()
             self.outbox.put({"type": "done"})
             STDOUT_CAPTURE_LOCK.release()
@@ -128,25 +206,29 @@ class ExploreSession:
         test_command: str | None,
         max_cost: float | None,
         max_steps: int,
+        from_checkpoint_id: str | None = None,
     ) -> None:
         self.task_id = str(uuid.uuid4())
         self.outbox: "queue.Queue[dict]" = queue.Queue()
         self._thread = threading.Thread(
-            target=self._run, args=(root, task, models, test_command, max_cost, max_steps), daemon=True
+            target=self._run,
+            args=(root, task, models, test_command, max_cost, max_steps, from_checkpoint_id),
+            daemon=True,
         )
         self._thread.start()
 
     def join(self, timeout: float | None = None) -> None:
         self._thread.join(timeout=timeout)
 
-    def _run(self, root, task, models, test_command, max_cost, max_steps) -> None:
+    def _run(self, root, task, models, test_command, max_cost, max_steps, from_checkpoint_id) -> None:
         checkpoint_manager = CheckpointManager(root)
         writer = _QueueWriter(self.outbox)
         try:
             with contextlib.redirect_stdout(writer):
                 results = run_explore(
                     task, models=models, root=root, checkpoint_manager=checkpoint_manager,
-                    max_cost=max_cost, test_command=test_command, max_steps=max_steps,
+                    from_checkpoint_id=from_checkpoint_id, max_cost=max_cost,
+                    test_command=test_command, max_steps=max_steps,
                 )
             report = format_explore_report(results, test_command)
             for line in report.splitlines():
