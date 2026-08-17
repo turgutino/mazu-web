@@ -240,14 +240,28 @@
   <!-- CHECKPOINTS -->
   <section id="tab-checkpoints" class="tab">
     <div class="tab-header"><h1>Checkpoints</h1><span class="hint">Timeline &amp; rollback</span></div>
-    <div class="tab-body"><div id="checkpoints-body" class="empty">Loading...</div></div>
+    <div class="tab-body">
+      <div class="field-row" style="align-items:flex-end; margin-bottom:16px;">
+        <div class="field" style="max-width:140px;"><label>Keep last N</label><input type="number" id="prune-keep-last" placeholder="e.g. 10"></div>
+        <button class="btn ghost small ghost" id="prune-btn" style="margin-bottom:14px;">Prune older</button>
+      </div>
+      <div id="checkpoints-body" class="empty">Loading...</div>
+    </div>
   </section>
 
   <!-- MEMORY -->
   <section id="tab-memory" class="tab">
     <div class="tab-header"><h1>Memory</h1><span class="hint">Project-scoped agent memory</span></div>
     <div class="tab-body">
-      <div class="field" style="max-width:320px;"><input type="text" id="memory-search" placeholder="Search memory..."></div>
+      <div id="memory-stats" class="stat-grid"></div>
+      <div class="field-row" style="align-items:flex-end;">
+        <div class="field" style="max-width:320px;"><label>Search</label><input type="text" id="memory-search" placeholder="Search memory..."></div>
+        <div class="field" style="max-width:320px;"><label>Why would QUERY retrieve? (optional)</label><input type="text" id="memory-why-query" placeholder="parser bug"></div>
+        <button class="btn ghost small" id="memory-why-btn" style="margin-bottom:14px;">Explain</button>
+        <button class="btn ghost small" id="memory-consolidate-btn" style="margin-bottom:14px;">Find duplicates</button>
+      </div>
+      <div id="memory-why-body"></div>
+      <div id="memory-consolidate-body"></div>
       <div id="memory-body" class="empty">Loading...</div>
     </div>
   </section>
@@ -261,7 +275,15 @@
   <!-- RUNS -->
   <section id="tab-runs" class="tab">
     <div class="tab-header"><h1>Runs</h1><span class="hint">History of mazu run / explore invocations</span></div>
-    <div class="tab-body"><div id="runs-body" class="empty">Loading...</div></div>
+    <div class="tab-body">
+      <div class="field-row" style="align-items:flex-end; margin-bottom:16px;">
+        <div class="field" style="max-width:200px;"><label>Compare: run A id</label><input type="text" id="runs-compare-a"></div>
+        <div class="field" style="max-width:200px;"><label>run B id</label><input type="text" id="runs-compare-b"></div>
+        <button class="btn ghost small" id="runs-compare-btn" style="margin-bottom:14px;">Compare</button>
+      </div>
+      <div id="runs-compare-body"></div>
+      <div id="runs-body" class="empty">Loading...</div>
+    </div>
   </section>
 
   <!-- ROUTER -->
@@ -560,6 +582,8 @@ async function loadCheckpoints() {
       <div style="margin-top:6px; color:var(--muted);">${esc(cp.summary || '')}</div>
       <div class="row-actions" style="margin-top:10px;">
         <button class="btn small ghost" data-act="diff">Diff</button>
+        <button class="btn small ghost" data-act="inspect">Inspect</button>
+        <button class="btn small ghost" data-act="compare">Compare with...</button>
         <button class="btn small ghost" data-act="branch">Branch from</button>
         <button class="btn small" data-act="rollback">Rollback</button>
       </div>
@@ -573,6 +597,26 @@ async function loadCheckpoints() {
       const res = await fetch(`/api/checkpoints/${cp.id}/diff`);
       const data = await res.json();
       panel.textContent = res.ok ? (data.diff_stat || '(no changes)') : data.error;
+    };
+    card.querySelector('[data-act=inspect]').onclick = async () => {
+      const panel = card.querySelector('.diff-panel');
+      if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+      panel.style.display = 'block';
+      panel.textContent = 'Loading...';
+      const res = await fetch(`/api/checkpoints/${cp.id}/inspect`);
+      const data = await res.json();
+      if (!res.ok) { panel.textContent = data.error; return; }
+      panel.textContent = JSON.stringify({entry: data.entry, memory: data.memory, conversation: data.conversation}, null, 2);
+    };
+    card.querySelector('[data-act=compare]').onclick = async () => {
+      const otherId = prompt('Compare with which checkpoint id?');
+      if (!otherId) return;
+      const panel = card.querySelector('.diff-panel');
+      panel.style.display = 'block';
+      panel.textContent = 'Loading comparison...';
+      const res = await fetch(`/api/checkpoints/compare?a=${encodeURIComponent(cp.id)}&b=${encodeURIComponent(otherId)}`);
+      const data = await res.json();
+      panel.textContent = res.ok ? (data.diff || '(no changes)') : data.error;
     };
     card.querySelector('[data-act=branch]').onclick = async () => {
       const branchName = prompt(`New branch name, pointing at ${cp.id} (your current branch/working tree is untouched):`);
@@ -594,10 +638,35 @@ async function loadCheckpoints() {
   });
 }
 
+$('#prune-btn').addEventListener('click', async () => {
+  const keepLast = $('#prune-keep-last').value;
+  if (!keepLast) { alert('Enter how many recent checkpoints to keep.'); return; }
+  if (!confirm(`Delete on-disk snapshot data for every checkpoint older than the last ${keepLast}?`)) return;
+  const res = await fetch('/api/checkpoints/prune', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({keep_last: parseInt(keepLast, 10)}),
+  });
+  const data = await res.json();
+  alert(`Pruned ${data.deleted} checkpoint(s).`);
+  loadCheckpoints();
+});
+
 // =========================================================================
 // MEMORY
 // =========================================================================
+async function loadMemoryStats() {
+  const el = $('#memory-stats');
+  const s = await (await fetch('/api/memory/stats')).json();
+  el.innerHTML = `
+    <div class="stat-box"><div class="num">${s.active}</div><div class="lbl">Active</div></div>
+    <div class="stat-box"><div class="num">${s.pinned}</div><div class="lbl">Pinned</div></div>
+    <div class="stat-box"><div class="num">${s.superseded}</div><div class="lbl">Superseded</div></div>
+    <div class="stat-box"><div class="num">${s.total}</div><div class="lbl">Total ever</div></div>
+  `;
+}
+
 async function loadMemory() {
+  loadMemoryStats();
   const body = $('#memory-body');
   body.textContent = 'Loading...'; body.className = 'empty';
   const q = $('#memory-search').value.trim();
@@ -617,6 +686,7 @@ async function loadMemory() {
       <td class="row-actions">
         <button class="btn small ghost" data-act="pin">${pinLabel}</button>
         <button class="btn small ghost" data-act="edit">Edit</button>
+        <button class="btn small ghost" data-act="forget">Forget</button>
       </td>`;
     tr.querySelector('[data-act=pin]').onclick = async () => {
       await fetch(`/api/memory/${m.id}/${m.pinned ? 'unpin' : 'pin'}`, {method: 'POST'});
@@ -633,12 +703,68 @@ async function loadMemory() {
       });
       loadMemory();
     };
+    tr.querySelector('[data-act=forget]').onclick = async () => {
+      if (!confirm(`Forget memory "${m.title}"? This cannot be undone.`)) return;
+      await fetch(`/api/memory/${m.id}/forget`, {method: 'POST'});
+      loadMemory();
+    };
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
   body.appendChild(table);
 }
 $('#memory-search').addEventListener('input', () => { clearTimeout(window._memDebounce); window._memDebounce = setTimeout(loadMemory, 300); });
+
+$('#memory-why-btn').addEventListener('click', async () => {
+  const q = $('#memory-why-query').value.trim();
+  const el = $('#memory-why-body');
+  el.innerHTML = '';
+  const rows = await (await fetch('/api/memory/why?q=' + encodeURIComponent(q))).json();
+  if (!rows.length) { el.innerHTML = '<div class="empty">No memories stored yet.</div>'; return; }
+  const block = document.createElement('div');
+  block.className = 'mono-block';
+  block.style.marginBottom = '16px';
+  block.textContent = rows.map(r => {
+    const mark = r.included ? '[x]' : '[ ]';
+    const score = r.combined == null ? r.reason : `bm25=${r.bm25.toFixed(2)} combined=${r.combined.toFixed(2)}`;
+    return `${mark} [${r.row.id}] (${r.row.category}) ${r.row.title} — ${score}`;
+  }).join('\n');
+  el.appendChild(block);
+});
+
+$('#memory-consolidate-btn').addEventListener('click', async () => {
+  const el = $('#memory-consolidate-body');
+  el.innerHTML = '<div class="empty">Checking...</div>';
+  const res = await fetch('/api/memory/consolidate', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({dry_run: true}),
+  });
+  const data = await res.json();
+  if (!data.clusters.length) { el.innerHTML = '<div class="empty">No near-duplicate memories found.</div>'; return; }
+  el.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h3>${data.clusters.length} duplicate group(s) found</h3>`;
+  data.clusters.forEach(c => {
+    const line = document.createElement('div');
+    line.style.cssText = 'font-size:12px; margin-bottom:6px;';
+    line.textContent = `Keep [${c.keep.id}] ${c.keep.title} ← merges ${c.merges.map(m => `[${m.id}] ${m.title}`).join(', ')}`;
+    card.appendChild(line);
+  });
+  const applyBtn = document.createElement('button');
+  applyBtn.className = 'btn small'; applyBtn.textContent = 'Apply merge'; applyBtn.style.marginTop = '10px';
+  applyBtn.onclick = async () => {
+    if (!confirm('Merge these duplicate groups? Superseded entries stay in the database but stop showing in context.')) return;
+    await fetch('/api/memory/consolidate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({dry_run: false}),
+    });
+    el.innerHTML = '';
+    loadMemory();
+  };
+  card.appendChild(applyBtn);
+  el.appendChild(card);
+});
 
 // =========================================================================
 // SKILLS
@@ -685,7 +811,7 @@ async function loadRuns() {
     const tr = document.createElement('tr');
     const statusClass = r.status === 'completed' ? 'ok' : (r.status === 'failed' ? 'bad' : 'warn');
     tr.innerHTML = `
-      <td>${esc((r.id || '').slice(0, 8))}</td>
+      <td style="font-size:10px;">${esc(r.id || '')}</td>
       <td>${esc(r.model || '')}</td>
       <td><span class="pill ${statusClass}">${esc(r.status)}</span></td>
       <td>${esc(r.stop_reason || '')}</td>
@@ -697,6 +823,31 @@ async function loadRuns() {
   table.appendChild(tbody);
   body.appendChild(table);
 }
+
+$('#runs-compare-btn').addEventListener('click', async () => {
+  const a = $('#runs-compare-a').value.trim();
+  const b = $('#runs-compare-b').value.trim();
+  const el = $('#runs-compare-body');
+  if (!a || !b) return;
+  el.innerHTML = '<div class="empty">Loading...</div>';
+  const res = await fetch(`/api/runs/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+  const data = await res.json();
+  if (!res.ok) { el.innerHTML = `<div class="empty">${esc(data.error)}</div>`; return; }
+  const fmtRun = (label, r) => `
+    <div class="card" style="flex:1;">
+      <h3>${label}: ${esc(r.id)}</h3>
+      <div style="font-size:12px; line-height:1.9;">
+        Branch: ${esc(r.branch_name || '(default)')}<br>
+        Status: ${esc(r.status)}<br>
+        Stop reason: ${esc(r.stop_reason || 'unknown')}<br>
+        Steps: ${r.last_step}/${r.max_steps}<br>
+        Checkpoints: ${r.checkpoints_created}<br>
+        Memories saved: ${r.memories_saved}<br>
+        Estimated cost: ${fmtCost(r.estimated_cost)}
+      </div>
+    </div>`;
+  el.innerHTML = `<div style="display:flex; gap:16px; margin-bottom:16px;">${fmtRun('Run A', data.run_a)}${fmtRun('Run B', data.run_b)}</div>`;
+});
 
 // =========================================================================
 // ROUTER

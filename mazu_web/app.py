@@ -8,7 +8,9 @@ from mazu.checkpoint.manager import CheckpointManager
 from mazu.config import _SECRET_CONFIG_KEYS, list_config, set_config_value
 from mazu.diagnostics import run_diagnostics
 from mazu.llm.capabilities import list_capabilities
-from mazu.memory.store import MemoryStore
+from mazu.memory.consolidate import apply_consolidation, find_duplicate_clusters
+from mazu.memory.retrieval import explain_retrieval
+from mazu.memory.store import FUZZY_DUPLICATE_THRESHOLD, MemoryStore
 from mazu.runs.router import TASK_TYPES, model_stats_by_task_type
 from mazu.runs.store import RunStore
 from mazu.skills.manager import SkillManager
@@ -204,6 +206,59 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
             return jsonify({"error": str(e)}), 400
         return jsonify({"ok": True, "checkpoint_id": entry["id"], "branch_name": branch_name})
 
+    @app.get("/api/checkpoints/compare")
+    def compare_checkpoints():
+        a, b = request.args.get("a"), request.args.get("b")
+        if not a or not b:
+            return jsonify({"error": "query params a and b (checkpoint ids) are required"}), 400
+        checkpoint_manager = CheckpointManager(root)
+        try:
+            entry_a, entry_b, diff = checkpoint_manager.compare(a, b)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify({"entry_a": entry_a, "entry_b": entry_b, "diff": diff})
+
+    @app.get("/api/checkpoints/<checkpoint_id>/inspect")
+    def inspect_checkpoint(checkpoint_id: str):
+        checkpoint_manager = CheckpointManager(root)
+        try:
+            entry = checkpoint_manager.show_entry(checkpoint_id)
+            memory_snapshot = checkpoint_manager.inspect_memory(checkpoint_id)
+            conversation = checkpoint_manager.inspect_conversation(checkpoint_id)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify({"entry": entry, "memory": memory_snapshot, "conversation": conversation})
+
+    @app.post("/api/checkpoints/prune")
+    def prune_checkpoints():
+        body = request.get_json(silent=True) or {}
+        keep_last = body.get("keep_last")
+        checkpoint_manager = CheckpointManager(root)
+        deleted = checkpoint_manager.prune(keep_last=int(keep_last) if keep_last is not None else None)
+        return jsonify({"deleted": deleted})
+
+    # -- runs -- compare-branches -----------------------------------------
+
+    @app.get("/api/runs/compare")
+    def compare_runs():
+        run_id_a, run_id_b = request.args.get("a"), request.args.get("b")
+        if not run_id_a or not run_id_b:
+            return jsonify({"error": "query params a and b (run ids) are required"}), 400
+        run_store = RunStore(_runs_db_path())
+        row_a, row_b = run_store.get(run_id_a), run_store.get(run_id_b)
+        run_store.close()
+        if row_a is None or row_b is None:
+            missing = run_id_a if row_a is None else run_id_b
+            return jsonify({"error": f"No run found with id {missing}."}), 404
+        usage_store = UsageStore(_usage_db_path())
+        cost_a = usage_store.summary(session_id=run_id_a)["total_cost"]
+        cost_b = usage_store.summary(session_id=run_id_b)["total_cost"]
+        usage_store.close()
+        return jsonify({
+            "run_a": {**dict(row_a), "estimated_cost": cost_a},
+            "run_b": {**dict(row_b), "estimated_cost": cost_b},
+        })
+
     # -- memory -------------------------------------------------------------
 
     @app.get("/api/memory")
@@ -236,6 +291,64 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         ok = memory_store.edit(memory_id, title=body.get("title"), body=body.get("body"))
         memory_store.close()
         return jsonify({"ok": ok})
+
+    @app.post("/api/memory/<int:memory_id>/forget")
+    def forget_memory(memory_id: int):
+        memory_store = MemoryStore(_memory_db_path())
+        ok = memory_store.forget(memory_id)
+        memory_store.close()
+        return jsonify({"ok": ok})
+
+    @app.post("/api/memory/<int:old_id>/supersede/<int:new_id>")
+    def supersede_memory(old_id: int, new_id: int):
+        memory_store = MemoryStore(_memory_db_path())
+        ok = memory_store.supersede(old_id, new_id)
+        memory_store.close()
+        return jsonify({"ok": ok})
+
+    @app.get("/api/memory/stats")
+    def memory_stats():
+        memory_store = MemoryStore(_memory_db_path())
+        stats = memory_store.stats()
+        memory_store.close()
+        # stats()'s "oldest"/"newest" are raw sqlite3.Row objects, not JSON-serializable.
+        stats["oldest"] = dict(stats["oldest"]) if stats["oldest"] is not None else None
+        stats["newest"] = dict(stats["newest"]) if stats["newest"] is not None else None
+        return jsonify(stats)
+
+    @app.get("/api/memory/why")
+    def memory_why():
+        query = request.args.get("q", "")
+        limit = request.args.get("limit", default=15, type=int)
+        memory_store = MemoryStore(_memory_db_path())
+        explanations = explain_retrieval(memory_store, query=query, limit=limit)
+        memory_store.close()
+        return jsonify([
+            {**{k: v for k, v in e.items() if k != "row"}, "row": dict(e["row"])}
+            for e in explanations
+        ])
+
+    @app.post("/api/memory/consolidate")
+    def consolidate_memory():
+        body = request.get_json(silent=True) or {}
+        threshold = float(body.get("threshold") or FUZZY_DUPLICATE_THRESHOLD)
+        dry_run = bool(body.get("dry_run", True))
+        memory_store = MemoryStore(_memory_db_path())
+        clusters = find_duplicate_clusters(memory_store, threshold=threshold)
+        if not clusters:
+            memory_store.close()
+            return jsonify({"clusters": []})
+        if dry_run:
+            preview = []
+            for cluster in clusters:
+                newest = max(cluster, key=lambda r: r["created_at"])
+                others = [dict(r) for r in cluster if r["id"] != newest["id"]]
+                preview.append({"keep": dict(newest), "merges": others})
+            memory_store.close()
+            return jsonify({"clusters": preview, "applied": False})
+        summary = apply_consolidation(memory_store, clusters)
+        memory_store.close()
+        return jsonify({"clusters": summary, "applied": True})
 
     # -- runs / router --------------------------------------------------
 

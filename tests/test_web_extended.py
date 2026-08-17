@@ -15,6 +15,7 @@ import pytest
 import mazu_web.task_session as task_session_module
 from mazu.checkpoint.manager import CheckpointManager
 from mazu.memory.store import MemoryStore
+from mazu.runs.store import RunStore
 from mazu.skills.manager import SkillManager
 from mazu_web.app import create_app
 from mazu_web.task_session import STDOUT_CAPTURE_LOCK
@@ -322,6 +323,150 @@ def test_doctor_endpoint_reports_diagnostics_without_live_calls(project):
     rows = res.get_json()
     assert len(rows) > 0
     assert all("status" in r and "name" in r and "message" in r for r in rows)
+
+
+# ---------------------------------------------------------------------------
+# checkpoints -- compare / inspect / prune
+# ---------------------------------------------------------------------------
+
+
+def test_compare_checkpoints_endpoint(project):
+    checkpoint_manager = CheckpointManager(project)
+    entry_a = checkpoint_manager.snapshot([], trigger="manual")
+    entry_b = checkpoint_manager.snapshot([], trigger="manual")
+
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.get(f"/api/checkpoints/compare?a={entry_a['id']}&b={entry_b['id']}")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["entry_a"]["id"] == entry_a["id"]
+    assert data["entry_b"]["id"] == entry_b["id"]
+
+    missing = client.get("/api/checkpoints/compare?a=does-not-exist&b=" + entry_b["id"])
+    assert missing.status_code == 400
+
+    incomplete = client.get(f"/api/checkpoints/compare?a={entry_a['id']}")
+    assert incomplete.status_code == 400
+
+
+def test_inspect_checkpoint_endpoint(project):
+    checkpoint_manager = CheckpointManager(project)
+    entry = checkpoint_manager.snapshot([{"role": "user", "content": "hi"}], trigger="manual")
+
+    app = create_app(project, None, None)
+    res = app.test_client().get(f"/api/checkpoints/{entry['id']}/inspect")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["entry"]["id"] == entry["id"]
+    assert "memory" in data and "conversation" in data
+
+
+def test_prune_checkpoints_endpoint(project):
+    checkpoint_manager = CheckpointManager(project)
+    for _ in range(3):
+        checkpoint_manager.snapshot([], trigger="manual")
+
+    app = create_app(project, None, None)
+    res = app.test_client().post("/api/checkpoints/prune", json={"keep_last": 1})
+    assert res.status_code == 200
+    assert res.get_json()["deleted"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# runs -- compare-branches
+# ---------------------------------------------------------------------------
+
+
+def test_compare_runs_endpoint(project):
+    run_store = RunStore(project / ".mazu" / "runs.db")
+    run_store.start("run-a", "task a", "anthropic:claude-sonnet-5", 15, 1, True, None, None, False)
+    run_store.finish("run-a", status="completed", stop_reason="end_turn")
+    run_store.start("run-b", "task b", "deepseek:deepseek-chat", 15, 1, True, None, None, False)
+    run_store.finish("run-b", status="completed", stop_reason="end_turn")
+    run_store.close()
+
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.get("/api/runs/compare?a=run-a&b=run-b")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["run_a"]["id"] == "run-a"
+    assert data["run_b"]["id"] == "run-b"
+
+    missing = client.get("/api/runs/compare?a=run-a&b=does-not-exist")
+    assert missing.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# memory -- forget / supersede / stats / why / consolidate
+# ---------------------------------------------------------------------------
+
+
+def test_memory_forget_and_supersede(project):
+    memory_store = MemoryStore(project / ".mazu" / "memory.db")
+    memory_store.add(category="fact", title="a", body="a body", tags="", source="explicit", session_id="s1")
+    memory_store.add(category="fact", title="b", body="b body", tags="", source="explicit", session_id="s1")
+    rows = memory_store.search(limit=2)
+    memory_store.close()
+
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.post(f"/api/memory/{rows[0]['id']}/supersede/{rows[1]['id']}")
+    assert res.get_json()["ok"] is True
+
+    res = client.post(f"/api/memory/{rows[1]['id']}/forget")
+    assert res.get_json()["ok"] is True
+
+
+def test_memory_stats_endpoint(project):
+    memory_store = MemoryStore(project / ".mazu" / "memory.db")
+    memory_store.add(category="fact", title="a", body="a body", tags="", source="explicit", session_id="s1")
+    memory_store.close()
+
+    app = create_app(project, None, None)
+    res = app.test_client().get("/api/memory/stats")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["total"] == 1
+
+
+def test_memory_why_endpoint(project):
+    memory_store = MemoryStore(project / ".mazu" / "memory.db")
+    memory_store.add(category="fact", title="parser bug", body="the parser has a bug", tags="", source="explicit", session_id="s1")
+    memory_store.close()
+
+    app = create_app(project, None, None)
+    res = app.test_client().get("/api/memory/why?q=parser")
+    assert res.status_code == 200
+    rows = res.get_json()
+    assert len(rows) >= 1
+    assert "row" in rows[0] and "included" in rows[0]
+    assert rows[0]["row"]["title"] == "parser bug"
+
+
+def test_memory_consolidate_dry_run_does_not_change_anything(project):
+    memory_store = MemoryStore(project / ".mazu" / "memory.db")
+    memory_store.add(category="fact", title="the sky is blue", body="the sky is blue", tags="", source="explicit", session_id="s1")
+    memory_store.add(category="fact", title="the sky is blue", body="the sky is blue", tags="", source="explicit", session_id="s1")
+    memory_store.close()
+
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.post("/api/memory/consolidate", json={"dry_run": True})
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["applied"] is False
+    assert len(data["clusters"]) == 1
+
+    memory_store2 = MemoryStore(project / ".mazu" / "memory.db")
+    remaining = memory_store2.search(limit=10)
+    memory_store2.close()
+    assert len(remaining) == 2  # dry run -- nothing actually merged
 
 
 # ---------------------------------------------------------------------------
