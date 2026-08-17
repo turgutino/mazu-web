@@ -156,7 +156,14 @@ def test_start_run_from_checkpoint_forks_a_new_branch_and_runs(project, monkeypa
     })
     assert res.status_code == 200
     session = app.task_sessions[res.get_json()["task_id"]]
-    events = _drain(session)
+    # checkpoint_manager.fork() below does real git operations (unlike the other
+    # tests here, which mock at the run_autonomous layer) -- seen to occasionally
+    # exceed the default 5s on Windows CI specifically. A slow git fork here isn't
+    # just a slow test: _drain timing out leaves this session's thread still
+    # running past the test's end, and it releases STDOUT_CAPTURE_LOCK whenever it
+    # finally finishes -- racing whatever later test happens to be mid-flight by
+    # then. Caught for real via a Windows-CI-only failure, not reasoned about.
+    events = _drain(session, timeout=20)
     lines = [e["text"] for e in events if e["type"] == "log"]
     assert any("Forked from" in line for line in lines)
     assert "ran on fork" in lines
