@@ -6,100 +6,343 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
-    --bg: #0f1115; --panel: #161923; --border: #2a2f3d; --text: #e6e8ee;
-    --muted: #8b91a3; --accent: #5b8def; --danger: #e0605a; --good: #4fb477;
+    --bg: #000000;
+    --bg-raised: #0d0d0d;
+    --bg-panel: #111111;
+    --border: #2a2a2a;
+    --border-bright: #4a4a4a;
+    --text: #f2f2f2;
+    --muted: #7a7a7a;
+    --dim: #4d4d4d;
+    --ok: #e8e8e8;
+    --bad: #ff5c5c;
+    --warn: #ffb84d;
+    --mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", sans-serif; height: 100vh; display: flex; flex-direction: column; }
-  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
-  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: 0.02em; }
-  nav { display: flex; gap: 4px; }
-  nav button { background: none; border: none; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-  nav button.active { background: var(--panel); color: var(--text); }
-  #model-badge { margin-left: auto; color: var(--muted); font-size: 12px; }
-  main { flex: 1; overflow: hidden; display: flex; }
-  .tab { display: none; flex: 1; overflow: auto; padding: 16px; }
-  .tab.active { display: flex; flex-direction: column; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.55 var(--mono);
+    height: 100vh; display: flex; overflow: hidden;
+    letter-spacing: 0.01em;
+  }
+  ::selection { background: var(--text); color: var(--bg); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); }
+  ::-webkit-scrollbar-track { background: var(--bg); }
 
-  /* chat */
-  #chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px; }
-  .msg { max-width: 78%; padding: 8px 12px; border-radius: 10px; white-space: pre-wrap; word-wrap: break-word; }
-  .msg.user { align-self: flex-end; background: var(--accent); color: white; }
-  .msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
-  .msg.system { align-self: center; color: var(--muted); font-size: 12px; background: none; }
-  .msg.error { align-self: center; color: var(--danger); background: none; }
-  .confirm-card { align-self: center; border: 1px solid var(--danger); background: var(--panel); padding: 10px 14px; border-radius: 8px; }
-  .confirm-card button { margin-top: 8px; margin-right: 8px; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; }
-  .confirm-card button.approve { border-color: var(--good); color: var(--good); }
-  .confirm-card button.deny { border-color: var(--danger); color: var(--danger); }
-  #chat-input-row { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
-  #chat-input { flex: 1; background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 8px; resize: none; font: inherit; }
-  #chat-input-row button { padding: 0 18px; border-radius: 8px; border: none; background: var(--accent); color: white; cursor: pointer; }
+  /* ---- sidebar ---- */
+  #sidebar {
+    width: 208px; flex-shrink: 0; background: var(--bg-raised);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  #brand {
+    padding: 18px 16px 14px; border-bottom: 1px solid var(--border);
+  }
+  #brand .name { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  #brand .sub { color: var(--dim); font-size: 10px; margin-top: 3px; letter-spacing: 0.08em; text-transform: uppercase; }
+  #nav { flex: 1; overflow-y: auto; padding: 10px 0; }
+  #nav button {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    background: none; border: none; border-left: 2px solid transparent;
+    color: var(--muted); padding: 9px 16px; cursor: pointer;
+    font: inherit; font-size: 12px; text-align: left; letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  #nav button:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  #nav button.active { color: var(--text); border-left-color: var(--text); background: rgba(255,255,255,0.05); font-weight: 600; }
+  #nav .glyph { width: 14px; text-align: center; opacity: 0.85; }
+  #nav .divider { height: 1px; background: var(--border); margin: 8px 16px; }
+  #status-strip {
+    padding: 10px 16px 14px; border-top: 1px solid var(--border);
+    font-size: 10px; color: var(--dim); letter-spacing: 0.05em;
+  }
+  #status-strip .row { display: flex; justify-content: space-between; margin-top: 3px; }
+  #busy-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--dim); margin-right: 5px; }
+  #busy-dot.on { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
 
-  /* tables */
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 500; }
-  .status-completed { color: var(--good); }
-  .status-stopped, .status-failed { color: var(--danger); }
-  .row-actions button { font-size: 12px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
-  select { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin-bottom: 12px; }
-  .empty { color: var(--muted); padding: 20px 0; }
+  /* ---- main ---- */
+  main { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+  .tab { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+  .tab.active { display: flex; }
+  .tab-header {
+    padding: 16px 24px 12px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: baseline; gap: 12px; flex-shrink: 0;
+  }
+  .tab-header h1 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin: 0; font-weight: 700; }
+  .tab-header .hint { color: var(--dim); font-size: 11px; }
+  .tab-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
+
+  /* ---- generic elements ---- */
+  button.btn {
+    background: var(--text); color: var(--bg); border: 1px solid var(--text);
+    font: inherit; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 8px 16px; cursor: pointer; font-weight: 700;
+  }
+  button.btn:hover { background: #d0d0d0; }
+  button.btn:disabled { background: var(--dim); border-color: var(--dim); color: var(--bg); cursor: not-allowed; }
+  button.btn.ghost { background: transparent; color: var(--text); }
+  button.btn.ghost:hover { background: rgba(255,255,255,0.08); }
+  button.btn.danger { background: var(--bad); border-color: var(--bad); color: #000; }
+  button.btn.small { padding: 4px 10px; font-size: 10px; }
+
+  input[type=text], input[type=number], input[type=password], textarea, select {
+    background: var(--bg-panel); border: 1px solid var(--border); color: var(--text);
+    font: inherit; font-size: 12px; padding: 8px 10px; width: 100%;
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--border-bright); }
+  label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 5px; }
+  .field { margin-bottom: 14px; }
+  .field-row { display: flex; gap: 14px; }
+  .field-row .field { flex: 1; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .checkbox-row input { width: auto; }
+  .checkbox-row label { margin: 0; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .empty { color: var(--dim); padding: 30px 0; text-align: center; font-size: 12px; }
+  .pill {
+    display: inline-block; border: 1px solid var(--border-bright); padding: 1px 7px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .pill.ok { border-color: var(--ok); }
+  .pill.bad { border-color: var(--bad); color: var(--bad); }
+  .pill.warn { border-color: var(--warn); color: var(--warn); }
+  .mono-block {
+    background: var(--bg-panel); border: 1px solid var(--border); padding: 12px;
+    white-space: pre-wrap; font-size: 12px; max-height: 340px; overflow-y: auto;
+  }
+  .row-actions { display: flex; gap: 6px; }
+  .card { border: 1px solid var(--border); background: var(--bg-panel); padding: 16px; margin-bottom: 14px; }
+  .card h3 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat-box { border: 1px solid var(--border); padding: 12px 14px; }
+  .stat-box .num { font-size: 22px; font-weight: 700; }
+  .stat-box .lbl { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+  .warn-banner { border: 1px solid var(--warn); color: var(--warn); padding: 8px 12px; font-size: 11px; margin-bottom: 14px; }
+
+  /* ---- chat ---- */
+  #chat-log { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 78%; padding: 9px 13px; white-space: pre-wrap; word-wrap: break-word; font-size: 12.5px; }
+  .msg.user { align-self: flex-end; background: var(--text); color: var(--bg); }
+  .msg.assistant { align-self: flex-start; background: var(--bg-panel); border: 1px solid var(--border); }
+  .msg.system { align-self: center; color: var(--dim); font-size: 11px; background: none; }
+  .msg.error { align-self: center; color: var(--bad); background: none; border: 1px solid var(--bad); padding: 6px 12px; }
+  .confirm-card { align-self: center; border: 1px solid var(--warn); background: var(--bg-panel); padding: 12px 16px; }
+  .confirm-card .tool-call { font-size: 11px; color: var(--warn); margin-bottom: 8px; }
+  .confirm-card .btns { display: flex; gap: 8px; }
+  #chat-input-row { display: flex; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  #chat-input { flex: 1; resize: none; }
+
+  /* ---- log stream (run/explore) ---- */
+  #task-log { flex: 1; }
 </style>
 </head>
 <body>
-<header>
-  <h1>mazu web</h1>
-  <nav>
-    <button data-tab="chat" class="active">Chat</button>
-    <button data-tab="checkpoints">Checkpoints</button>
-    <button data-tab="memory">Memory</button>
-    <button data-tab="router">Router</button>
+<aside id="sidebar">
+  <div id="brand">
+    <div class="name">mazu</div>
+    <div class="sub">web control</div>
+  </div>
+  <nav id="nav">
+    <button data-tab="chat" class="active"><span class="glyph">&gt;_</span>Chat</button>
+    <button data-tab="run"><span class="glyph">&#9654;</span>Run</button>
+    <button data-tab="explore"><span class="glyph">&#8942;</span>Explore</button>
+    <div class="divider"></div>
+    <button data-tab="checkpoints"><span class="glyph">&#9673;</span>Checkpoints</button>
+    <button data-tab="memory"><span class="glyph">&#9635;</span>Memory</button>
+    <button data-tab="skills"><span class="glyph">&#9733;</span>Skills</button>
+    <div class="divider"></div>
+    <button data-tab="runs"><span class="glyph">&#8801;</span>Runs</button>
+    <button data-tab="router"><span class="glyph">&#8776;</span>Router</button>
+    <button data-tab="usage"><span class="glyph">&#164;</span>Usage</button>
+    <button data-tab="log"><span class="glyph">&#9776;</span>Log</button>
+    <div class="divider"></div>
+    <button data-tab="config"><span class="glyph">&#9881;</span>Config</button>
   </nav>
-  <div id="model-badge"></div>
-</header>
+  <div id="status-strip">
+    <div class="row"><span><span id="busy-dot"></span>agent</span><span id="busy-text">idle</span></div>
+    <div class="row"><span>model</span><span id="model-badge">-</span></div>
+  </div>
+</aside>
+
 <main>
+  <!-- CHAT -->
   <section id="tab-chat" class="tab active">
     <div id="chat-log"></div>
     <div id="chat-input-row">
       <textarea id="chat-input" rows="2" placeholder="Describe a task..."></textarea>
-      <button id="chat-send">Send</button>
+      <button class="btn" id="chat-send">Send</button>
     </div>
   </section>
 
+  <!-- RUN -->
+  <section id="tab-run" class="tab">
+    <div class="tab-header"><h1>Run</h1><span class="hint">One-shot autonomous task (mazu run)</span></div>
+    <div class="tab-body" style="display:flex; flex-direction:column; gap:16px; height:100%;">
+      <div class="card">
+        <div class="field"><label>Task</label><textarea id="run-task" rows="2" placeholder="Fix the bug in parser.py"></textarea></div>
+        <div class="field-row">
+          <div class="field"><label>Max steps</label><input type="number" id="run-max-steps" value="15"></div>
+          <div class="field"><label>Max cost (USD, optional)</label><input type="number" id="run-max-cost" step="0.01" placeholder="unset"></div>
+          <div class="field"><label>Model (optional)</label><input type="text" id="run-model" placeholder="auto"></div>
+        </div>
+        <div class="checkbox-row"><input type="checkbox" id="run-allow-shell"><label for="run-allow-shell">Allow shell (skip confirmation)</label></div>
+        <button class="btn" id="run-start">Start Run</button>
+      </div>
+      <div id="run-log" class="mono-block" style="flex:1;"></div>
+    </div>
+  </section>
+
+  <!-- EXPLORE -->
+  <section id="tab-explore" class="tab">
+    <div class="tab-header"><h1>Explore</h1><span class="hint">Parallel branches, ranked comparison (mazu explore)</span></div>
+    <div class="tab-body" style="display:flex; flex-direction:column; gap:16px; height:100%;">
+      <div class="warn-banner">Runs N full autonomous agents in parallel with shell forced on. Expect roughly Nx the cost of a single run.</div>
+      <div class="card">
+        <div class="field"><label>Task</label><textarea id="explore-task" rows="2" placeholder="Fix the intermittent test failure"></textarea></div>
+        <div class="field"><label>Models (comma-separated)</label><input type="text" id="explore-models" placeholder="anthropic:claude-sonnet-5,deepseek:deepseek-chat"></div>
+        <div class="field-row">
+          <div class="field"><label>Test command (optional)</label><input type="text" id="explore-test-command" placeholder="pytest -q"></div>
+          <div class="field"><label>Max cost (USD, shared)</label><input type="number" id="explore-max-cost" step="0.01" placeholder="unset"></div>
+          <div class="field"><label>Max steps / branch</label><input type="number" id="explore-max-steps" value="15"></div>
+        </div>
+        <button class="btn" id="explore-start">Start Explore</button>
+      </div>
+      <div id="explore-log" class="mono-block" style="flex:1;"></div>
+    </div>
+  </section>
+
+  <!-- CHECKPOINTS -->
   <section id="tab-checkpoints" class="tab">
-    <div id="checkpoints-body" class="empty">Loading...</div>
+    <div class="tab-header"><h1>Checkpoints</h1><span class="hint">Timeline &amp; rollback</span></div>
+    <div class="tab-body"><div id="checkpoints-body" class="empty">Loading...</div></div>
   </section>
 
+  <!-- MEMORY -->
   <section id="tab-memory" class="tab">
-    <div id="memory-body" class="empty">Loading...</div>
+    <div class="tab-header"><h1>Memory</h1><span class="hint">Project-scoped agent memory</span></div>
+    <div class="tab-body">
+      <div class="field" style="max-width:320px;"><input type="text" id="memory-search" placeholder="Search memory..."></div>
+      <div id="memory-body" class="empty">Loading...</div>
+    </div>
   </section>
 
+  <!-- SKILLS -->
+  <section id="tab-skills" class="tab">
+    <div class="tab-header"><h1>Skills</h1><span class="hint">Saved reusable solutions</span></div>
+    <div class="tab-body"><div id="skills-body" class="empty">Loading...</div></div>
+  </section>
+
+  <!-- RUNS -->
+  <section id="tab-runs" class="tab">
+    <div class="tab-header"><h1>Runs</h1><span class="hint">History of mazu run / explore invocations</span></div>
+    <div class="tab-body"><div id="runs-body" class="empty">Loading...</div></div>
+  </section>
+
+  <!-- ROUTER -->
   <section id="tab-router" class="tab">
-    <select id="router-task-type"><option value="">all task types</option></select>
-    <div id="router-body" class="empty">Loading...</div>
+    <div class="tab-header"><h1>Router</h1><span class="hint">Model win-rate from explore history</span></div>
+    <div class="tab-body">
+      <div class="field" style="max-width:220px;"><select id="router-task-type"><option value="">all task types</option></select></div>
+      <div id="router-body" class="empty">Loading...</div>
+    </div>
+  </section>
+
+  <!-- USAGE -->
+  <section id="tab-usage" class="tab">
+    <div class="tab-header"><h1>Usage</h1><span class="hint">Estimated API spend</span></div>
+    <div class="tab-body">
+      <div class="field" style="max-width:220px;">
+        <select id="usage-since">
+          <option value="">all time</option>
+          <option value="1">last 1 day</option>
+          <option value="7">last 7 days</option>
+          <option value="30">last 30 days</option>
+        </select>
+      </div>
+      <div id="usage-body" class="empty">Loading...</div>
+    </div>
+  </section>
+
+  <!-- LOG -->
+  <section id="tab-log" class="tab">
+    <div class="tab-header"><h1>Action Log</h1><span class="hint">Every tool call, every session</span></div>
+    <div class="tab-body" style="display:flex; gap:20px; height:100%;">
+      <div style="flex:1; min-width:0; overflow-y:auto;"><div id="log-sessions-body" class="empty">Loading...</div></div>
+      <div style="flex:1; min-width:0; overflow-y:auto;"><div id="log-detail-body" class="empty">Select a session</div></div>
+    </div>
+  </section>
+
+  <!-- CONFIG -->
+  <section id="tab-config" class="tab">
+    <div class="tab-header"><h1>Config</h1><span class="hint">~/.mazu/config.toml</span></div>
+    <div class="tab-body">
+      <div id="config-body" class="empty">Loading...</div>
+      <div class="card" style="max-width:480px; margin-top:20px;">
+        <h3>Set a value</h3>
+        <div class="field"><label>Key</label>
+          <select id="config-key">
+            <option value="default_model">default_model</option>
+            <option value="router_suggestions">router_suggestions</option>
+            <option value="local_base_url">local_base_url</option>
+            <option value="api_key">api_key</option>
+            <option value="ANTHROPIC_API_KEY">ANTHROPIC_API_KEY</option>
+            <option value="OPENAI_API_KEY">OPENAI_API_KEY</option>
+            <option value="DEEPSEEK_API_KEY">DEEPSEEK_API_KEY</option>
+            <option value="GEMINI_API_KEY">GEMINI_API_KEY</option>
+          </select>
+        </div>
+        <div class="field"><label>Value</label><input type="text" id="config-value"></div>
+        <button class="btn" id="config-set">Set</button>
+      </div>
+    </div>
   </section>
 </main>
 
 <script>
 const $ = (sel, root) => (root || document).querySelector(sel);
 const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtCost = (n) => `$${(n || 0).toFixed(4)}`;
 
 // -- tabs ---------------------------------------------------------------
-$$('nav button').forEach(btn => btn.addEventListener('click', () => {
-  $$('nav button').forEach(b => b.classList.remove('active'));
+const loaders = {
+  checkpoints: loadCheckpoints, memory: loadMemory, skills: loadSkills,
+  runs: loadRuns, router: loadRouter, usage: loadUsage, log: loadLogSessions,
+  config: loadConfig,
+};
+$$('#nav button').forEach(btn => btn.addEventListener('click', () => {
+  $$('#nav button').forEach(b => b.classList.remove('active'));
   $$('.tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
   $('#tab-' + btn.dataset.tab).classList.add('active');
-  if (btn.dataset.tab === 'checkpoints') loadCheckpoints();
-  if (btn.dataset.tab === 'memory') loadMemory();
-  if (btn.dataset.tab === 'router') loadRouter();
+  const loader = loaders[btn.dataset.tab];
+  if (loader) loader();
 }));
 
-// -- chat -----------------------------------------------------------------
+// -- busy status polling -------------------------------------------------
+async function pollBusy() {
+  try {
+    const data = await (await fetch('/api/tasks/busy')).json();
+    $('#busy-dot').classList.toggle('on', data.busy);
+    $('#busy-text').textContent = data.busy ? 'busy (run/explore)' : 'idle';
+    $('#run-start').disabled = data.busy;
+    $('#explore-start').disabled = data.busy;
+  } catch (e) {}
+}
+setInterval(pollBusy, 2000);
+pollBusy();
+
+// =========================================================================
+// CHAT
+// =========================================================================
 let sessionId = null;
 let currentAssistantEl = null;
-let evtSource = null;
 
 function appendMsg(role, text) {
   const log = $('#chat-log');
@@ -115,23 +358,17 @@ function appendConfirm(toolName, toolInput) {
   const log = $('#chat-log');
   const card = document.createElement('div');
   card.className = 'confirm-card';
-  card.innerHTML = `<div><strong>${toolName}</strong>(${escapeHtml(JSON.stringify(toolInput))})</div>`;
+  card.innerHTML = `<div class="tool-call">${esc(toolName)}(${esc(JSON.stringify(toolInput))})</div><div class="btns"></div>`;
+  const btns = card.querySelector('.btns');
   const approve = document.createElement('button');
-  approve.textContent = 'Run it';
-  approve.className = 'approve';
+  approve.className = 'btn small'; approve.textContent = 'Run it';
   const deny = document.createElement('button');
-  deny.textContent = 'Decline';
-  deny.className = 'deny';
+  deny.className = 'btn small ghost'; deny.textContent = 'Decline';
   approve.onclick = () => { respondConfirm(true); card.remove(); };
   deny.onclick = () => { respondConfirm(false); card.remove(); };
-  card.appendChild(approve);
-  card.appendChild(deny);
+  btns.appendChild(approve); btns.appendChild(deny);
   log.appendChild(card);
   log.scrollTop = log.scrollHeight;
-}
-
-function escapeHtml(s) {
-  return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
 
 async function respondConfirm(approved) {
@@ -146,7 +383,7 @@ async function startSession() {
   const data = await res.json();
   sessionId = data.session_id;
   $('#model-badge').textContent = data.model;
-  evtSource = new EventSource(`/api/chat/${sessionId}/events`);
+  const evtSource = new EventSource(`/api/chat/${sessionId}/events`);
   evtSource.onmessage = (e) => {
     const event = JSON.parse(e.data);
     if (event.type === 'delta') {
@@ -155,7 +392,7 @@ async function startSession() {
       $('#chat-log').scrollTop = $('#chat-log').scrollHeight;
     } else if (event.type === 'usage') {
       currentAssistantEl = null;
-      const suffix = event.total_cost != null ? ` | ~$${event.total_cost.toFixed(4)} total` : '';
+      const suffix = event.total_cost != null ? ` | ~${fmtCost(event.total_cost)} total` : '';
       appendMsg('system', `[usage] ${event.text}${suffix}`);
     } else if (event.type === 'info') {
       appendMsg('system', `[memory] ${event.text}`);
@@ -191,68 +428,221 @@ $('#chat-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 
-// -- checkpoints ----------------------------------------------------------
+// =========================================================================
+// RUN / EXPLORE -- shared task-stream helper
+// =========================================================================
+function streamTask(taskId, logEl) {
+  logEl.textContent = '';
+  const evtSource = new EventSource(`/api/tasks/${taskId}/events`);
+  evtSource.onmessage = (e) => {
+    const event = JSON.parse(e.data);
+    if (event.type === 'log') {
+      logEl.textContent += event.text + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    } else if (event.type === 'done') {
+      evtSource.close();
+      pollBusy();
+    }
+  };
+}
+
+$('#run-start').addEventListener('click', async () => {
+  const task = $('#run-task').value.trim();
+  if (!task) return;
+  const body = {
+    task,
+    max_steps: parseInt($('#run-max-steps').value || '15', 10),
+    allow_shell: $('#run-allow-shell').checked,
+  };
+  const maxCost = $('#run-max-cost').value;
+  if (maxCost) body.max_cost = parseFloat(maxCost);
+  const model = $('#run-model').value.trim();
+  if (model) body.model = model;
+
+  const res = await fetch('/api/run', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const data = await res.json();
+  if (!res.ok) { $('#run-log').textContent = `[error] ${data.error}`; return; }
+  pollBusy();
+  streamTask(data.task_id, $('#run-log'));
+});
+
+$('#explore-start').addEventListener('click', async () => {
+  const task = $('#explore-task').value.trim();
+  const models = $('#explore-models').value.trim();
+  if (!task || !models) return;
+  const body = {
+    task, models,
+    max_steps: parseInt($('#explore-max-steps').value || '15', 10),
+  };
+  const testCommand = $('#explore-test-command').value.trim();
+  if (testCommand) body.test_command = testCommand;
+  const maxCost = $('#explore-max-cost').value;
+  if (maxCost) body.max_cost = parseFloat(maxCost);
+
+  const res = await fetch('/api/explore', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const data = await res.json();
+  if (!res.ok) { $('#explore-log').textContent = `[error] ${data.error}`; return; }
+  pollBusy();
+  streamTask(data.task_id, $('#explore-log'));
+});
+
+// =========================================================================
+// CHECKPOINTS
+// =========================================================================
 async function loadCheckpoints() {
   const body = $('#checkpoints-body');
-  body.textContent = 'Loading...';
+  body.textContent = 'Loading...'; body.className = 'empty';
   const rows = await (await fetch('/api/checkpoints')).json();
-  if (!rows.length) { body.textContent = 'No checkpoints yet.'; body.className = 'empty'; return; }
-  body.className = '';
-  const table = document.createElement('table');
-  table.innerHTML = `<thead><tr><th>ID</th><th>Trigger</th><th>Summary</th><th>Created</th><th></th></tr></thead>`;
-  const tbody = document.createElement('tbody');
+  if (!rows.length) { body.textContent = 'No checkpoints yet.'; return; }
+  body.className = ''; body.innerHTML = '';
   rows.forEach(cp => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${cp.id}</td><td>${cp.trigger || ''}</td><td>${escapeHtml(cp.summary || '')}</td><td>${cp.created_at || ''}</td>`;
-    const actionTd = document.createElement('td');
-    actionTd.className = 'row-actions';
-    const btn = document.createElement('button');
-    btn.textContent = 'Rollback';
-    btn.onclick = async () => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:baseline;">
+        <div><strong>${esc(cp.id)}</strong> <span class="pill">${esc(cp.trigger || '')}</span></div>
+        <span style="color:var(--dim); font-size:11px;">${esc(cp.created_at || '')}</span>
+      </div>
+      <div style="margin-top:6px; color:var(--muted);">${esc(cp.summary || '')}</div>
+      <div class="row-actions" style="margin-top:10px;">
+        <button class="btn small ghost" data-act="diff">Diff</button>
+        <button class="btn small" data-act="rollback">Rollback</button>
+      </div>
+      <div class="diff-panel mono-block" style="display:none; margin-top:10px;"></div>
+    `;
+    card.querySelector('[data-act=diff]').onclick = async () => {
+      const panel = card.querySelector('.diff-panel');
+      if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+      panel.style.display = 'block';
+      panel.textContent = 'Loading diff...';
+      const res = await fetch(`/api/checkpoints/${cp.id}/diff`);
+      const data = await res.json();
+      panel.textContent = res.ok ? (data.diff_stat || '(no changes)') : data.error;
+    };
+    card.querySelector('[data-act=rollback]').onclick = async () => {
       if (!confirm(`Rollback to ${cp.id}? This discards code, memory, and conversation state since then.`)) return;
       const res = await fetch(`/api/checkpoints/${cp.id}/rollback`, {method: 'POST'});
       const data = await res.json();
-      if (data.error) alert(data.error); else alert(`Restored to ${cp.id}.`);
+      alert(data.error || `Restored to ${cp.id}.`);
     };
-    actionTd.appendChild(btn);
-    tr.appendChild(actionTd);
-    tbody.appendChild(tr);
+    body.appendChild(card);
   });
-  table.appendChild(tbody);
-  body.innerHTML = '';
-  body.appendChild(table);
 }
 
-// -- memory -----------------------------------------------------------------
+// =========================================================================
+// MEMORY
+// =========================================================================
 async function loadMemory() {
   const body = $('#memory-body');
-  body.textContent = 'Loading...';
-  const rows = await (await fetch('/api/memory')).json();
-  if (!rows.length) { body.textContent = 'No memories saved yet.'; body.className = 'empty'; return; }
-  body.className = '';
+  body.textContent = 'Loading...'; body.className = 'empty';
+  const q = $('#memory-search').value.trim();
+  const rows = await (await fetch('/api/memory?q=' + encodeURIComponent(q))).json();
+  if (!rows.length) { body.textContent = 'No memories saved yet.'; return; }
+  body.className = ''; body.innerHTML = '';
   const table = document.createElement('table');
-  table.innerHTML = `<thead><tr><th>Category</th><th>Title</th><th>Body</th><th>Pinned</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>Category</th><th>Title</th><th>Body</th><th></th></tr></thead>`;
   const tbody = document.createElement('tbody');
   rows.forEach(m => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${m.category || ''}</td><td>${escapeHtml(m.title || '')}</td><td>${escapeHtml((m.body || '').slice(0, 200))}</td><td>${m.pinned ? 'yes' : ''}</td>`;
+    const pinLabel = m.pinned ? 'Unpin' : 'Pin';
+    tr.innerHTML = `
+      <td>${esc(m.category || '')}</td>
+      <td>${esc(m.title || '')}</td>
+      <td>${esc((m.body || '').slice(0, 160))}</td>
+      <td class="row-actions">
+        <button class="btn small ghost" data-act="pin">${pinLabel}</button>
+        <button class="btn small ghost" data-act="edit">Edit</button>
+      </td>`;
+    tr.querySelector('[data-act=pin]').onclick = async () => {
+      await fetch(`/api/memory/${m.id}/${m.pinned ? 'unpin' : 'pin'}`, {method: 'POST'});
+      loadMemory();
+    };
+    tr.querySelector('[data-act=edit]').onclick = async () => {
+      const title = prompt('New title:', m.title);
+      if (title === null) return;
+      const newBody = prompt('New body:', m.body);
+      if (newBody === null) return;
+      await fetch(`/api/memory/${m.id}/edit`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({title, body: newBody}),
+      });
+      loadMemory();
+    };
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
-  body.innerHTML = '';
+  body.appendChild(table);
+}
+$('#memory-search').addEventListener('input', () => { clearTimeout(window._memDebounce); window._memDebounce = setTimeout(loadMemory, 300); });
+
+// =========================================================================
+// SKILLS
+// =========================================================================
+async function loadSkills() {
+  const body = $('#skills-body');
+  body.textContent = 'Loading...'; body.className = 'empty';
+  const rows = await (await fetch('/api/skills')).json();
+  if (!rows.length) { body.textContent = 'No skills saved yet.'; return; }
+  body.className = ''; body.innerHTML = '';
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>Name</th><th>Description</th><th>Tags</th><th>Uses</th><th></th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  rows.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${esc(s.name)}</td><td>${esc(s.description || '')}</td>
+      <td>${esc(s.tags || '')}</td><td>${esc(s.usage_count ?? 0)}</td>
+      <td><button class="btn small ghost" data-act="forget">Forget</button></td>`;
+    tr.querySelector('[data-act=forget]').onclick = async () => {
+      if (!confirm(`Forget skill "${s.name}"?`)) return;
+      await fetch(`/api/skills/${s.name}/forget`, {method: 'POST'});
+      loadSkills();
+    };
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
   body.appendChild(table);
 }
 
-// -- router -----------------------------------------------------------------
-let routerTypesLoaded = false;
+// =========================================================================
+// RUNS
+// =========================================================================
+async function loadRuns() {
+  const body = $('#runs-body');
+  body.textContent = 'Loading...'; body.className = 'empty';
+  const rows = await (await fetch('/api/runs')).json();
+  if (!rows.length) { body.textContent = 'No runs recorded yet.'; return; }
+  body.className = ''; body.innerHTML = '';
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>ID</th><th>Model</th><th>Status</th><th>Stop</th><th>Steps</th><th>Checkpoints</th><th>Started</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    const statusClass = r.status === 'completed' ? 'ok' : (r.status === 'failed' ? 'bad' : 'warn');
+    tr.innerHTML = `
+      <td>${esc((r.id || '').slice(0, 8))}</td>
+      <td>${esc(r.model || '')}</td>
+      <td><span class="pill ${statusClass}">${esc(r.status)}</span></td>
+      <td>${esc(r.stop_reason || '')}</td>
+      <td>${esc(r.last_step)}/${esc(r.max_steps)}</td>
+      <td>${esc(r.checkpoints_created)}</td>
+      <td>${esc((r.started_at || '').slice(0, 19))}</td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  body.appendChild(table);
+}
 
+// =========================================================================
+// ROUTER
+// =========================================================================
+let routerTypesLoaded = false;
 async function loadRouter() {
   const body = $('#router-body');
-  body.textContent = 'Loading...';
+  body.textContent = 'Loading...'; body.className = 'empty';
   const taskType = $('#router-task-type').value;
   const qs = taskType ? `?task_type=${encodeURIComponent(taskType)}` : '';
   const data = await (await fetch('/api/router/stats' + qs)).json();
-
   if (!routerTypesLoaded) {
     data.task_types.forEach(t => {
       const opt = document.createElement('option');
@@ -261,24 +651,139 @@ async function loadRouter() {
     });
     routerTypesLoaded = true;
   }
-
-  if (!data.stats.length) { body.textContent = 'No explore history recorded yet.'; body.className = 'empty'; return; }
-  body.className = '';
+  if (!data.stats.length) { body.textContent = 'No explore history recorded yet.'; return; }
+  body.className = ''; body.innerHTML = '';
   const table = document.createElement('table');
   table.innerHTML = `<thead><tr><th>Model</th><th>Wins</th><th>Win rate</th><th>Tests passed</th><th>Avg cost</th></tr></thead>`;
   const tbody = document.createElement('tbody');
   data.stats.forEach(s => {
     const tr = document.createElement('tr');
     const passStr = s.tested ? `${s.passed}/${s.tested}` : '—';
-    tr.innerHTML = `<td>${s.model}</td><td>${s.wins}/${s.total}</td><td>${(s.win_rate * 100).toFixed(0)}%</td><td>${passStr}</td><td>$${s.avg_cost.toFixed(4)}</td>`;
+    tr.innerHTML = `<td>${esc(s.model)}</td><td>${s.wins}/${s.total}</td><td>${(s.win_rate * 100).toFixed(0)}%</td><td>${passStr}</td><td>${fmtCost(s.avg_cost)}</td>`;
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
-  body.innerHTML = '';
   body.appendChild(table);
 }
-
 $('#router-task-type').addEventListener('change', loadRouter);
+
+// =========================================================================
+// USAGE
+// =========================================================================
+async function loadUsage() {
+  const body = $('#usage-body');
+  body.textContent = 'Loading...'; body.className = 'empty';
+  const since = $('#usage-since').value;
+  const qs = since ? `?since_days=${since}` : '';
+  const data = await (await fetch('/api/usage' + qs)).json();
+  body.className = ''; body.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'stat-grid';
+  grid.innerHTML = `
+    <div class="stat-box"><div class="num">${fmtCost(data.total_cost)}</div><div class="lbl">Total cost</div></div>
+    <div class="stat-box"><div class="num">${data.total_calls}</div><div class="lbl">Total calls</div></div>
+  `;
+  body.appendChild(grid);
+  if (data.has_unpriced_calls) {
+    const warn = document.createElement('div');
+    warn.className = 'warn-banner';
+    warn.textContent = 'Some calls used a model with no pricing entry -- their cost is not included above.';
+    body.appendChild(warn);
+  }
+  if (!data.by_model.length) { body.appendChild(Object.assign(document.createElement('div'), {className: 'empty', textContent: 'No usage recorded yet.'})); return; }
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>Provider</th><th>Model</th><th>Calls</th><th>Input tok</th><th>Output tok</th><th>Cost</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  data.by_model.forEach(m => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(m.provider)}</td><td>${esc(m.model)}</td><td>${m.calls}</td><td>${m.input_tokens || 0}</td><td>${m.output_tokens || 0}</td><td>${fmtCost(m.cost)}</td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  body.appendChild(table);
+}
+$('#usage-since').addEventListener('change', loadUsage);
+
+// =========================================================================
+// ACTION LOG
+// =========================================================================
+async function loadLogSessions() {
+  const body = $('#log-sessions-body');
+  body.textContent = 'Loading...'; body.className = 'empty';
+  const rows = await (await fetch('/api/action-log')).json();
+  if (!rows.length) { body.textContent = 'No sessions logged yet.'; return; }
+  body.className = ''; body.innerHTML = '';
+  rows.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.cursor = 'pointer';
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between;">
+        <strong>${esc(s.command)}</strong>
+        <span class="pill ${s.error_count ? 'bad' : 'ok'}">${s.action_count} actions${s.error_count ? `, ${s.error_count} errors` : ''}</span>
+      </div>
+      <div style="color:var(--dim); font-size:11px; margin-top:4px;">${esc((s.session_id || '').slice(0,8))} &middot; ${esc((s.last_at || '').slice(0,19))}</div>
+    `;
+    card.onclick = () => loadLogDetail(s.session_id);
+    body.appendChild(card);
+  });
+}
+
+async function loadLogDetail(sessionId) {
+  const body = $('#log-detail-body');
+  body.textContent = 'Loading...'; body.className = 'empty';
+  const rows = await (await fetch(`/api/action-log/${sessionId}`)).json();
+  if (!rows.length) { body.textContent = 'No actions.'; return; }
+  body.className = ''; body.innerHTML = '';
+  rows.forEach(a => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    const outcomeClass = a.outcome === 'ok' ? 'ok' : 'bad';
+    div.innerHTML = `
+      <div style="display:flex; justify-content:space-between;">
+        <strong>${esc(a.tool_name)}</strong><span class="pill ${outcomeClass}">${esc(a.outcome)}</span>
+      </div>
+      <div style="color:var(--dim); font-size:11px; margin-top:4px;">${esc(a.created_at || '')}</div>
+      <div style="margin-top:8px; font-size:11px; color:var(--muted); white-space:pre-wrap;">${esc(a.tool_input || '')}</div>
+    `;
+    body.appendChild(div);
+  });
+}
+
+// =========================================================================
+// CONFIG
+// =========================================================================
+async function loadConfig() {
+  const body = $('#config-body');
+  body.textContent = 'Loading...'; body.className = 'empty';
+  const data = await (await fetch('/api/config')).json();
+  const keys = Object.keys(data);
+  if (!keys.length) { body.textContent = 'No config set.'; return; }
+  body.className = ''; body.innerHTML = '';
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr><th>Key</th><th>Value</th></tr></thead>`;
+  const tbody = document.createElement('tbody');
+  keys.forEach(k => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(k)}</td><td>${esc(data[k])}</td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  body.appendChild(table);
+}
+$('#config-set').addEventListener('click', async () => {
+  const key = $('#config-key').value;
+  const value = $('#config-value').value;
+  if (!value) return;
+  const res = await fetch('/api/config', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key, value}),
+  });
+  const data = await res.json();
+  if (!res.ok) { alert(data.error); return; }
+  $('#config-value').value = '';
+  loadConfig();
+});
 </script>
 </body>
 </html>
