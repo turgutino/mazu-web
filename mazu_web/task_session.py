@@ -11,6 +11,7 @@ from mazu.agent.council import run_council
 from mazu.agent.explore import format_explore_report, run_explore
 from mazu.agent.registry_factory import build_registry
 from mazu.checkpoint.manager import CheckpointManager
+from mazu.config import load_config
 from mazu.memory.store import MemoryStore
 from mazu.runs.store import RunStore
 from mazu.skills.manager import SkillManager
@@ -102,6 +103,7 @@ class RunSession:
         self, root, task, model, max_steps, checkpoint_every, allow_shell, keep_checkpoints,
         max_cost, shell_allowlist, dry_run, resume_run_id, from_checkpoint_id, branch_name,
     ) -> None:
+        load_config()  # see ChatSession._run's comment on why this matters here
         writer = _QueueWriter(self.outbox)
         checkpoint_kwargs = {"retention": keep_checkpoints} if keep_checkpoints is not None else {}
         checkpoint_manager = CheckpointManager(root, **checkpoint_kwargs)
@@ -221,6 +223,7 @@ class ExploreSession:
         self._thread.join(timeout=timeout)
 
     def _run(self, root, task, models, test_command, max_cost, max_steps, from_checkpoint_id) -> None:
+        load_config()  # see ChatSession._run's comment on why this matters here
         checkpoint_manager = CheckpointManager(root)
         writer = _QueueWriter(self.outbox)
         try:
@@ -268,6 +271,7 @@ class CouncilSession:
         self._thread.join(timeout=timeout)
 
     def _run(self, root, question, models, lead_model, max_cost) -> None:
+        load_config()  # see ChatSession._run's comment on why this matters here
         session_id = str(uuid.uuid4())
         memory_store = MemoryStore(root / ".mazu" / "memory.db")
         global_memory_store = MemoryStore(Path.home() / ".mazu" / "global_memory.db")

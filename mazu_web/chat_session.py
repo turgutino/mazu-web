@@ -7,7 +7,7 @@ from mazu.action_log.store import ActionLogStore, record_action
 from mazu.agent.context import build_system_prompt
 from mazu.agent.registry_factory import build_registry
 from mazu.agent.session import finalize_session
-from mazu.config import router_suggestions_enabled
+from mazu.config import load_config, router_suggestions_enabled
 from mazu.llm.client import _split_model, default_model, run_turn_stream, summarize_usage
 from mazu.llm.errors import MazuAPIError
 from mazu.llm.pricing import estimate_cost
@@ -90,6 +90,15 @@ class ChatSession:
     # -- background thread ---------------------------------------------------
 
     def _run(self) -> None:
+        # Real bug caught live: mazu-web is a long-running server process, not a
+        # per-invocation CLI call, so nothing had ever called load_config() here --
+        # a key saved via `mazu setup`/`mazu config set` (or this app's own Config
+        # tab) sits in config.toml but never reaches this process's environment,
+        # so a real, working, verified key still hit "DEEPSEEK_API_KEY is not
+        # set." Called fresh per session (not once at server startup) so a key
+        # added to the Config tab after the server started works without a
+        # restart.
+        load_config()
         self.memory_store = MemoryStore(self.root / ".mazu" / "memory.db")
         self.global_memory_store = MemoryStore(Path.home() / ".mazu" / "global_memory.db")
         self.skill_manager = SkillManager(self.root)

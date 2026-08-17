@@ -84,6 +84,38 @@ def test_chat_message_streams_deltas_and_ends_the_turn(project, monkeypatch):
     session.join(timeout=5)
 
 
+def test_chat_session_picks_up_a_key_saved_via_config_toml_not_just_env_vars(project, monkeypatch):
+    """Real bug caught live: mazu-web is a long-running server process, not a
+    per-invocation CLI call like `mazu chat` -- nothing had ever called
+    load_config() here, so a key saved via `mazu setup`/`mazu config set` (or this
+    app's own Config tab) sat in config.toml but never reached this process's
+    environment. `mazu chat` in a terminal worked fine with the exact same key;
+    mazu-web errored "DEEPSEEK_API_KEY is not set." ChatSession._run() now calls
+    load_config() itself, same as every real key-resolution path already does.
+    """
+    import os
+
+    from mazu.config import set_config_value
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    set_config_value("deepseek_api_key", "sk-fake-from-config-toml")
+
+    monkeypatch.setattr(chat_session_module, "run_turn_stream", _end_turn_stream)
+    app = create_app(project, "deepseek:deepseek-chat", None)
+    client = app.test_client()
+    session_id = client.post("/api/chat/start").get_json()["session_id"]
+    session = app.sessions[session_id]
+
+    client.post(f"/api/chat/{session_id}/message", json={"text": "hi"})
+    _wait_for(session.outbox, "turn_done")
+
+    assert os.environ.get("DEEPSEEK_API_KEY") == "sk-fake-from-config-toml"
+
+    session.close()
+    session.join(timeout=5)
+
+
 def test_destructive_tool_call_blocks_on_confirm_and_resumes_on_approval(project, monkeypatch):
     calls = {"n": 0}
 
