@@ -25,7 +25,7 @@ Run and Explore and Council share one server-wide lock: all three wrap print()-o
 pip install "mazu-web @ git+https://github.com/turgutino/mazu-web.git"
 ```
 
-Depends on the core [`mazu`](https://github.com/turgutino/Mazu) package, installed automatically. Once `mazu` is published to PyPI, this package's dependency will switch from a git URL to a normal version pin.
+Depends on the core [`mazu`](https://pypi.org/project/mazu/) package (`mazu>=0.21.0`, pulled from PyPI automatically -- `mazu-web` itself isn't on PyPI yet, only installable from this repo for now).
 
 ## Run
 

@@ -1,7 +1,7 @@
 [project]
 name = "mazu-web"
-version = "0.1.0"
-description = "A local browser UI for Mazu -- chat (streamed) plus read-only Checkpoints/Memory/Router tabs."
+version = "0.2.0"
+description = "A local browser UI for Mazu -- full command parity with the terminal (chat, run, explore, council, checkpoints, memory, skills, router, usage, log, models, doctor, config, init, setup), streamed."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -22,7 +22,7 @@ classifiers = [
     "Topic :: Software Development",
 ]
 dependencies = [
-    "mazu @ git+https://github.com/turgutino/Mazu.git",
+    "mazu>=0.21.0",
     "flask>=3.0",
     "click>=8.1",
 ]
@@ -41,9 +41,6 @@ mazu-web = "mazu_web.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.metadata]
-allow-direct-references = true  # needed for the `mazu @ git+https://...` dependency until mazu is on PyPI
 
 [tool.hatch.build.targets.wheel]
 packages = ["mazu_web"]
