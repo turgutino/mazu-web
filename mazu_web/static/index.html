@@ -157,6 +157,7 @@
     <button data-tab="checkpoints"><span class="glyph">&#9673;</span>Checkpoints</button>
     <button data-tab="memory"><span class="glyph">&#9635;</span>Memory</button>
     <button data-tab="skills"><span class="glyph">&#9733;</span>Skills</button>
+    <button data-tab="curator"><span class="glyph">&#9851;</span>Curator</button>
     <div class="divider"></div>
     <button data-tab="runs"><span class="glyph">&#8801;</span>Runs</button>
     <button data-tab="router"><span class="glyph">&#8776;</span>Router</button>
@@ -287,9 +288,13 @@
         <div class="field" style="max-width:320px;"><label>Why would QUERY retrieve? (optional)</label><input type="text" id="memory-why-query" placeholder="parser bug"></div>
         <button class="btn ghost small" id="memory-why-btn" style="margin-bottom:14px;">Explain</button>
         <button class="btn ghost small" id="memory-consolidate-btn" style="margin-bottom:14px;">Find duplicates</button>
+        <button class="btn ghost small" id="memory-stale-btn" style="margin-bottom:14px;">Find stale</button>
+        <button class="btn ghost small" id="memory-archived-btn" style="margin-bottom:14px;">Show archived</button>
       </div>
       <div id="memory-why-body"></div>
       <div id="memory-consolidate-body"></div>
+      <div id="memory-stale-body"></div>
+      <div id="memory-archived-body"></div>
       <div id="memory-body" class="empty">Loading...</div>
     </div>
   </section>
@@ -298,6 +303,39 @@
   <section id="tab-skills" class="tab">
     <div class="tab-header"><h1>Skills</h1><span class="hint">Saved reusable solutions</span></div>
     <div class="tab-body"><div id="skills-body" class="empty">Loading...</div></div>
+  </section>
+
+  <!-- CURATOR -->
+  <section id="tab-curator" class="tab">
+    <div class="tab-header"><h1>Curator</h1><span class="hint">Autonomous maintenance, own API key -- opt-in</span></div>
+    <div class="tab-body" style="display:flex; flex-direction:column; gap:16px; height:100%; overflow-y:auto;">
+      <div id="curator-status-card" class="card"></div>
+
+      <div class="card" id="curator-run-card" style="display:none;">
+        <h3>Run a pass</h3>
+        <div class="field-row">
+          <div class="field" style="max-width:340px;"><label>Areas (none checked = all)</label>
+            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="memory" id="curator-area-memory"><label for="curator-area-memory">memory</label></div>
+            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="skills" id="curator-area-skills"><label for="curator-area-skills">skills</label></div>
+            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="housekeeping" id="curator-area-housekeeping"><label for="curator-area-housekeeping">housekeeping</label></div>
+            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="conflicts" id="curator-area-conflicts"><label for="curator-area-conflicts">conflicts</label></div>
+          </div>
+          <div class="field">
+            <label>Max cost (USD, optional)</label><input type="number" id="curator-max-cost" step="0.01" placeholder="unset">
+            <label style="margin-top:10px;">Max rounds / area</label><input type="number" id="curator-max-rounds" value="8">
+          </div>
+        </div>
+        <div class="checkbox-row"><input type="checkbox" id="curator-full"><label for="curator-full">Full (ignore watermarks, re-check every area)</label></div>
+        <div class="checkbox-row"><input type="checkbox" id="curator-dry-run"><label for="curator-dry-run">Dry run (preview only, nothing applied)</label></div>
+        <button class="btn" id="curator-run-start">Run Curator</button>
+      </div>
+      <div id="curator-log" class="mono-block" style="min-height:120px;"></div>
+
+      <div class="card" id="curator-diary-card" style="display:none;">
+        <h3>Diary</h3>
+        <div id="curator-diary-body" class="empty">Loading...</div>
+      </div>
+    </div>
   </section>
 
   <!-- RUNS -->
@@ -397,6 +435,12 @@
             <option value="openai_api_key">openai_api_key</option>
             <option value="deepseek_api_key">deepseek_api_key</option>
             <option value="gemini_api_key">gemini_api_key</option>
+            <option value="curator_api_key">curator_api_key</option>
+            <option value="curator_model">curator_model</option>
+            <option value="curator_base_url">curator_base_url</option>
+            <option value="curator_enabled">curator_enabled</option>
+            <option value="council_models">council_models</option>
+            <option value="council_lead">council_lead</option>
           </select>
         </div>
         <div class="field"><label>Value</label><input type="text" id="config-value"></div>
@@ -415,6 +459,7 @@ const fmtCost = (n) => `$${(n || 0).toFixed(4)}`;
 // -- tabs ---------------------------------------------------------------
 const loaders = {
   checkpoints: loadCheckpoints, memory: loadMemory, skills: loadSkills,
+  curator: loadCurator,
   runs: loadRuns, router: loadRouter, usage: loadUsage, log: loadLogSessions,
   config: loadConfig, models: loadModels, doctor: loadDoctor,
 };
@@ -438,6 +483,8 @@ async function pollBusy() {
     $('#run-fork-start').disabled = data.busy;
     $('#explore-start').disabled = data.busy;
     $('#council-start').disabled = data.busy;
+    const curatorRunBtn = $('#curator-run-start');
+    if (curatorRunBtn) curatorRunBtn.disabled = data.busy;
   } catch (e) {}
 }
 setInterval(pollBusy, 2000);
@@ -762,6 +809,7 @@ async function loadMemoryStats() {
     <div class="stat-box"><div class="num">${s.active}</div><div class="lbl">Active</div></div>
     <div class="stat-box"><div class="num">${s.pinned}</div><div class="lbl">Pinned</div></div>
     <div class="stat-box"><div class="num">${s.superseded}</div><div class="lbl">Superseded</div></div>
+    <div class="stat-box"><div class="num">${s.archived}</div><div class="lbl">Archived</div></div>
     <div class="stat-box"><div class="num">${s.total}</div><div class="lbl">Total ever</div></div>
   `;
 }
@@ -867,6 +915,61 @@ $('#memory-consolidate-btn').addEventListener('click', async () => {
   el.appendChild(card);
 });
 
+$('#memory-stale-btn').addEventListener('click', async () => {
+  const el = $('#memory-stale-body');
+  el.innerHTML = '<div class="empty">Checking...</div>';
+  const rows = await (await fetch('/api/memory/stale')).json();
+  if (!rows.length) { el.innerHTML = '<div class="empty">No memories stale for 30+ days.</div>'; return; }
+  el.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h3>${rows.length} memor${rows.length === 1 ? 'y' : 'ies'} stale (30+ days, no recent retrieval)</h3>`;
+  rows.forEach(m => {
+    const line = document.createElement('div');
+    line.style.cssText = 'font-size:12px; margin-bottom:6px;';
+    line.textContent = `[${m.id}] (${m.category}) ${m.title} — created ${(m.created_at || '').slice(0, 10)}, last used ${m.last_used_at || 'never'}`;
+    card.appendChild(line);
+  });
+  const archiveBtn = document.createElement('button');
+  archiveBtn.className = 'btn small'; archiveBtn.textContent = 'Archive these'; archiveBtn.style.marginTop = '10px';
+  archiveBtn.onclick = async () => {
+    if (!confirm('Archive these stale memories? This is reversible — archived entries stay in the database and can be restored from the list below.')) return;
+    await fetch('/api/memory/stale/archive', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})});
+    el.innerHTML = '';
+    loadMemory();
+  };
+  card.appendChild(archiveBtn);
+  el.appendChild(card);
+});
+
+$('#memory-archived-btn').addEventListener('click', async () => {
+  const el = $('#memory-archived-body');
+  el.innerHTML = '<div class="empty">Loading...</div>';
+  const rows = await (await fetch('/api/memory/archived')).json();
+  if (!rows.length) { el.innerHTML = '<div class="empty">No archived memories.</div>'; return; }
+  el.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h3>${rows.length} archived memor${rows.length === 1 ? 'y' : 'ies'}</h3>`;
+  rows.forEach(m => {
+    const line = document.createElement('div');
+    line.style.cssText = 'font-size:12px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; gap:10px;';
+    const label = document.createElement('span');
+    label.textContent = `[${m.id}] (${m.category}) ${m.title}`;
+    const restoreBtn = document.createElement('button');
+    restoreBtn.className = 'btn small ghost'; restoreBtn.textContent = 'Unarchive';
+    restoreBtn.onclick = async () => {
+      await fetch(`/api/memory/${m.id}/unarchive`, {method: 'POST'});
+      $('#memory-archived-btn').click();
+      loadMemory();
+    };
+    line.appendChild(label);
+    line.appendChild(restoreBtn);
+    card.appendChild(line);
+  });
+  el.appendChild(card);
+});
+
 // =========================================================================
 // SKILLS
 // =========================================================================
@@ -895,6 +998,96 @@ async function loadSkills() {
   table.appendChild(tbody);
   body.appendChild(table);
 }
+
+// =========================================================================
+// CURATOR
+// =========================================================================
+async function loadCuratorStatus() {
+  const card = $('#curator-status-card');
+  const data = await (await fetch('/api/curator/status')).json();
+  if (!data.configured) {
+    card.innerHTML = `
+      <h3>Not configured</h3>
+      <div style="font-size:12px; color:var(--muted); line-height:1.7;">
+        Curator is fully opt-in and uses its OWN, separate API key -- never your main model's.
+        Set <code>curator_api_key</code> and <code>curator_model</code> (e.g. <code>anthropic:claude-haiku-4-5</code>)
+        on the Config tab to get started.
+      </div>`;
+    $('#curator-run-card').style.display = 'none';
+    $('#curator-diary-card').style.display = 'none';
+    return;
+  }
+  const areaRows = Object.entries(data.areas).map(([name, w]) =>
+    `<div>${esc(name)}: ${w ? esc(w.last_run_at.slice(0, 19)) : 'never curated'}</div>`
+  ).join('');
+  card.innerHTML = `
+    <h3>${data.enabled ? 'Enabled' : 'Disabled'} -- ${esc(data.model)}</h3>
+    <div style="font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:10px;">${areaRows}</div>
+    <button class="btn small ghost" id="curator-toggle-btn">${data.enabled ? 'Disable' : 'Enable'}</button>
+  `;
+  $('#curator-toggle-btn').onclick = async () => {
+    await fetch(`/api/curator/${data.enabled ? 'disable' : 'enable'}`, {method: 'POST'});
+    loadCuratorStatus();
+  };
+  $('#curator-run-card').style.display = '';
+  $('#curator-diary-card').style.display = '';
+}
+
+async function loadCuratorDiary() {
+  const el = $('#curator-diary-body');
+  const rows = await (await fetch('/api/curator/log?limit=30')).json();
+  if (!rows.length) { el.textContent = 'No decisions logged yet.'; el.className = 'empty'; return; }
+  el.className = ''; el.innerHTML = '';
+  rows.forEach(r => {
+    const line = document.createElement('div');
+    line.style.cssText = 'font-size:12px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border);';
+    const applied = r.applied ? '' : ' (dry-run)';
+    const target = r.target_type ? ` ${esc(r.target_type)}:${esc(r.target_id)}` : '';
+    line.innerHTML = `
+      <div>[${esc((r.created_at || '').slice(0, 19))}] (${esc(r.area)}) <b>${esc(r.action)}</b>${target}${applied}</div>
+      <div style="color:var(--muted);">${esc(r.rationale)}</div>
+    `;
+    if (r.applied) {
+      const undoBtn = document.createElement('button');
+      undoBtn.className = 'btn small ghost'; undoBtn.textContent = 'Undo'; undoBtn.style.marginTop = '4px';
+      undoBtn.onclick = async () => {
+        const res = await fetch(`/api/curator/undo/${r.id}`, {method: 'POST'});
+        const data = await res.json();
+        if (data.ok) { loadCuratorDiary(); }
+        else { alert(data.message || (data.reversal_hint ? `No automatic undo. Try:\n${data.reversal_hint}` : 'Could not undo.')); }
+      };
+      line.appendChild(undoBtn);
+    }
+    el.appendChild(line);
+  });
+}
+
+function loadCurator() {
+  loadCuratorStatus();
+  loadCuratorDiary();
+}
+
+$('#curator-run-start').addEventListener('click', async () => {
+  const areas = $$('.curator-area:checked').map(el => el.value);
+  const body = {
+    full: $('#curator-full').checked,
+    dry_run: $('#curator-dry-run').checked,
+    max_rounds: parseInt($('#curator-max-rounds').value || '8', 10),
+  };
+  if (areas.length) body.areas = areas;
+  const maxCost = $('#curator-max-cost').value;
+  if (maxCost) body.max_cost = parseFloat(maxCost);
+
+  const res = await fetch('/api/curator/run', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const data = await res.json();
+  if (!res.ok) { $('#curator-log').textContent = `[error] ${data.error}`; return; }
+  if (data.ran === false) { $('#curator-log').textContent = `Curator did not run: ${data.reason}`; return; }
+  pollBusy();
+  streamTask(data.task_id, $('#curator-log'));
+  const evtCheck = setInterval(() => {
+    if (!$('#curator-run-start').disabled) { clearInterval(evtCheck); loadCuratorDiary(); loadCuratorStatus(); }
+  }, 2000);
+});
 
 // =========================================================================
 // RUNS

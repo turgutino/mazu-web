@@ -12,6 +12,7 @@ from mazu.agent.explore import format_explore_report, run_explore
 from mazu.agent.registry_factory import build_registry
 from mazu.checkpoint.manager import CheckpointManager
 from mazu.config import load_config
+from mazu.curator.orchestrator import run_curator
 from mazu.memory.store import MemoryStore
 from mazu.runs.store import RunStore
 from mazu.skills.manager import SkillManager
@@ -301,5 +302,68 @@ class CouncilSession:
             global_memory_store.close()
             usage_store.close()
             action_log_store.close()
+            self.outbox.put({"type": "done"})
+            STDOUT_CAPTURE_LOCK.release()
+
+
+class CuratorSession:
+    """One `mazu curator run` invocation. Mirrors CouncilSession's shape exactly
+    (run_curator is a plain synchronous function, same as run_council) --
+    background thread + stdout-capture, so a pass that touches several areas
+    doesn't block the HTTP request or risk a browser/proxy timeout. verbose=True
+    is passed through so the same per-round usage/tool-call lines `mazu curator
+    run --verbose` prints in a terminal are what streams to the browser here --
+    not a separate, web-only summary. Caller must hold STDOUT_CAPTURE_LOCK
+    (non-blocking) before constructing this, same as every other task session.
+    """
+
+    def __init__(
+        self,
+        root: Path,
+        areas: list[str] | None,
+        full: bool,
+        dry_run: bool,
+        max_cost: float | None,
+        max_rounds: int,
+    ) -> None:
+        self.task_id = str(uuid.uuid4())
+        self.outbox: "queue.Queue[dict]" = queue.Queue()
+        self.summary = None  # populated once _run finishes, for the caller to inspect after "done"
+        self._thread = threading.Thread(
+            target=self._run, args=(root, areas, full, dry_run, max_cost, max_rounds), daemon=True
+        )
+        self._thread.start()
+
+    def join(self, timeout: float | None = None) -> None:
+        self._thread.join(timeout=timeout)
+
+    def _run(self, root, areas, full, dry_run, max_cost, max_rounds) -> None:
+        load_config()  # see ChatSession._run's comment on why this matters here -- does NOT
+        # touch curator_api_key (mazu.curator.config reads that independently, see
+        # mazu/curator/config.py), only the main provider keys this call path has always injected.
+        writer = _QueueWriter(self.outbox)
+        try:
+            with contextlib.redirect_stdout(writer):
+                self.summary = run_curator(
+                    root, areas=areas, full=full, dry_run=dry_run,
+                    max_cost=max_cost, max_rounds=max_rounds, verbose=True,
+                )
+            if not self.summary.ran:
+                self.outbox.put({"type": "log", "text": f"Curator did not run: {self.summary.reason}"})
+            else:
+                self.outbox.put({"type": "log", "text": f"Curator run {self.summary.run_id} ({'dry-run' if dry_run else 'applied'}):"})
+                for area_result in self.summary.areas:
+                    if not area_result.ran:
+                        self.outbox.put({"type": "log", "text": f"  {area_result.area}: skipped ({area_result.skipped_reason})"})
+                    else:
+                        self.outbox.put({
+                            "type": "log",
+                            "text": f"  {area_result.area}: {area_result.log_entries} decision(s), ~${area_result.cost:.4f}",
+                        })
+                self.outbox.put({"type": "log", "text": f"Total estimated cost: ${self.summary.total_cost:.4f}"})
+        except Exception as e:
+            self.outbox.put({"type": "log", "text": f"[error] {e}"})
+        finally:
+            writer.flush()
             self.outbox.put({"type": "done"})
             STDOUT_CAPTURE_LOCK.release()

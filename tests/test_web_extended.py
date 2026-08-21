@@ -682,6 +682,90 @@ def test_memory_consolidate_dry_run_does_not_change_anything(project):
 
 
 # ---------------------------------------------------------------------------
+# memory -- stale / archive / unarchive
+# ---------------------------------------------------------------------------
+
+
+def _backdate(store, memory_id, days_ago):
+    from datetime import datetime, timedelta, timezone
+
+    ts = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+    store.conn.execute("UPDATE memories SET created_at = ? WHERE id = ?", (ts, memory_id))
+    store.conn.commit()
+
+
+def test_memory_stale_endpoint_lists_candidates_without_changing_anything(project):
+    memory_store = MemoryStore(project / ".mazu" / "memory.db")
+    stale_id = memory_store.add(category="fact", title="old fact", body="body", tags="", source="explicit", session_id="s1")
+    _backdate(memory_store, stale_id, days_ago=40)
+    fresh_id = memory_store.add(category="fact", title="fresh fact", body="body", tags="", source="explicit", session_id="s1")
+    memory_store.close()
+
+    app = create_app(project, None, None)
+    res = app.test_client().get("/api/memory/stale")
+    assert res.status_code == 200
+    rows = res.get_json()
+    assert [r["id"] for r in rows] == [stale_id]
+
+    memory_store2 = MemoryStore(project / ".mazu" / "memory.db")
+    active_ids = {r["id"] for r in memory_store2.all_active()}
+    memory_store2.close()
+    assert stale_id in active_ids
+    assert fresh_id in active_ids
+
+
+def test_memory_stale_archive_endpoint_archives_candidates_reversibly(project):
+    memory_store = MemoryStore(project / ".mazu" / "memory.db")
+    stale_id = memory_store.add(category="fact", title="old fact", body="body", tags="", source="explicit", session_id="s1")
+    _backdate(memory_store, stale_id, days_ago=40)
+    memory_store.close()
+
+    app = create_app(project, None, None)
+    client = app.test_client()
+
+    res = client.post("/api/memory/stale/archive", json={})
+    assert res.status_code == 200
+    archived = res.get_json()["archived"]
+    assert [a["id"] for a in archived] == [stale_id]
+
+    memory_store2 = MemoryStore(project / ".mazu" / "memory.db")
+    active_ids = {r["id"] for r in memory_store2.all_active()}
+    archived_ids = {r["id"] for r in memory_store2.list_archived()}
+    memory_store2.close()
+    assert stale_id not in active_ids
+    assert stale_id in archived_ids
+
+    res = client.post(f"/api/memory/{stale_id}/unarchive")
+    assert res.get_json()["ok"] is True
+
+    memory_store3 = MemoryStore(project / ".mazu" / "memory.db")
+    active_ids_after = {r["id"] for r in memory_store3.all_active()}
+    memory_store3.close()
+    assert stale_id in active_ids_after
+
+
+def test_memory_archived_endpoint_lists_archived_only(project):
+    memory_store = MemoryStore(project / ".mazu" / "memory.db")
+    active_id = memory_store.add(category="fact", title="active", body="body", tags="", source="explicit", session_id="s1")
+    archived_id = memory_store.add(category="fact", title="archived", body="body", tags="", source="explicit", session_id="s1")
+    memory_store.archive(archived_id)
+    memory_store.close()
+
+    app = create_app(project, None, None)
+    res = app.test_client().get("/api/memory/archived")
+    assert res.status_code == 200
+    rows = res.get_json()
+    assert [r["id"] for r in rows] == [archived_id]
+    assert active_id not in {r["id"] for r in rows}
+
+
+def test_memory_unarchive_unknown_id_returns_not_ok(project):
+    app = create_app(project, None, None)
+    res = app.test_client().post("/api/memory/9999/unarchive")
+    assert res.get_json()["ok"] is False
+
+
+# ---------------------------------------------------------------------------
 # config -- unset (the one config subcommand missed in the first pass)
 # ---------------------------------------------------------------------------
 

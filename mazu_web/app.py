@@ -6,10 +6,14 @@ from pathlib import Path
 from mazu.action_log.store import ActionLogStore
 from mazu.checkpoint.manager import CheckpointManager
 from mazu.config import _SECRET_CONFIG_KEYS, config_path, list_config, set_config_value, unset_config_value
+from mazu.curator.config import curator_configured, curator_enabled, curator_model
+from mazu.curator.orchestrator import KNOWN_AREAS
+from mazu.curator.store import CuratorStore
 from mazu.diagnostics import check_live_api_key, ensure_gitignore, run_diagnostics
 from mazu.llm.capabilities import list_capabilities
 from mazu.memory.consolidate import apply_consolidation, find_duplicate_clusters
 from mazu.memory.retrieval import explain_retrieval
+from mazu.memory.staleness import DEFAULT_STALE_DAYS, apply_archival, find_stale_candidates
 from mazu.memory.store import FUZZY_DUPLICATE_THRESHOLD, MemoryStore
 from mazu.runs.router import TASK_TYPES, model_stats_by_task_type
 from mazu.runs.store import RunStore
@@ -17,7 +21,7 @@ from mazu.skills.manager import SkillManager
 from mazu.usage.store import UsageStore
 
 from mazu_web.chat_session import ChatSession
-from mazu_web.task_session import STDOUT_CAPTURE_LOCK, CouncilSession, ExploreSession, RunSession
+from mazu_web.task_session import STDOUT_CAPTURE_LOCK, CouncilSession, CuratorSession, ExploreSession, RunSession
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -53,6 +57,33 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
 
     def _action_log_db_path() -> Path:
         return root / ".mazu" / "action_log.db"
+
+    def _curator_db_path() -> Path:
+        return root / ".mazu" / "curator.db"
+
+    def _parse_number(raw, field_name: str, cast, default=None):
+        """Real bug found via live testing (on the Curator endpoint, but the same
+        unguarded pattern existed at every numeric body field across this file):
+        a non-numeric value (e.g. a client sending "not-a-number" for max_cost/
+        max_steps/max_rounds/etc.) used to reach a bare int()/float() call inside
+        a background-task factory lambda, raising deep inside _start_task's
+        factory() call and surfacing as a generic Flask 500 HTML page instead of
+        a clean error -- confusing for an API caller, even though it never
+        crashed the server or left STDOUT_CAPTURE_LOCK held (_start_task already
+        releases it on any factory() exception). Every numeric body field across
+        /api/run, /api/explore, /api/council, /api/curator/run,
+        /api/memory/stale/archive, and /api/memory/consolidate now validates
+        through this one helper instead of a bare cast, returning a clean 400
+        with a specific field name instead. Returns (value, error_response_or_None)
+        -- callers check `if err: return err` before using `value`.
+        """
+        value = raw if raw not in (None, "") else default
+        if value is None:
+            return None, None
+        try:
+            return cast(value), None
+        except (TypeError, ValueError):
+            return None, (jsonify({"error": f"{field_name} must be a number"}), 400)
 
     @app.get("/")
     def index():
@@ -202,15 +233,27 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         if resume_run_id is not None and task is not None:
             return jsonify({"error": "Pass either a new task or resume, not both."}), 400
 
+        max_steps, err = _parse_number(body.get("max_steps"), "max_steps", int, default=15)
+        if err:
+            return err
+        checkpoint_every, err = _parse_number(body.get("checkpoint_every"), "checkpoint_every", int, default=1)
+        if err:
+            return err
+        max_cost, err = _parse_number(body.get("max_cost"), "max_cost", float)
+        if err:
+            return err
+        keep_checkpoints, err = _parse_number(body.get("keep_checkpoints"), "keep_checkpoints", int)
+        if err:
+            return err
+
         payload, status = _start_task(
             "run",
             lambda: RunSession(
                 root=root, task=task, model=body.get("model") or model,
-                max_steps=int(body.get("max_steps") or 15),
-                checkpoint_every=int(body.get("checkpoint_every") or 1),
+                max_steps=max_steps, checkpoint_every=checkpoint_every,
                 allow_shell=bool(body.get("allow_shell", False)),
-                keep_checkpoints=body.get("keep_checkpoints"),
-                max_cost=body.get("max_cost"),
+                keep_checkpoints=keep_checkpoints,
+                max_cost=max_cost,
                 shell_allowlist=body.get("shell_allowlist") or None,
                 dry_run=bool(body.get("dry_run", False)),
                 resume_run_id=resume_run_id,
@@ -233,7 +276,9 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
             # other available provider. Reused directly, not reimplemented.
             from mazu.cli import _auto_pick_models
 
-            approaches = int(body.get("approaches") or 2)
+            approaches, err = _parse_number(body.get("approaches"), "approaches", int, default=2)
+            if err:
+                return err
             try:
                 models = _auto_pick_models(root, task, approaches)
             except Exception as e:
@@ -243,13 +288,19 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
             if not models:
                 return jsonify({"error": "models is required unless auto_models is set"}), 400
 
+        max_cost, err = _parse_number(body.get("max_cost"), "max_cost", float)
+        if err:
+            return err
+        max_steps, err = _parse_number(body.get("max_steps"), "max_steps", int, default=15)
+        if err:
+            return err
+
         payload, status = _start_task(
             "explore",
             lambda: ExploreSession(
                 root=root, task=task, models=models,
                 test_command=body.get("test_command") or None,
-                max_cost=body.get("max_cost"),
-                max_steps=int(body.get("max_steps") or 15),
+                max_cost=max_cost, max_steps=max_steps,
                 from_checkpoint_id=body.get("from_checkpoint") or None,
             ),
         )
@@ -267,11 +318,14 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         lead_model = (body.get("lead_model") or "").strip() or DEFAULT_COUNCIL_LEAD
         if not question or not models:
             return jsonify({"error": "question is required"}), 400
+        max_cost, err = _parse_number(body.get("max_cost"), "max_cost", float)
+        if err:
+            return err
         payload, status = _start_task(
             "council",
             lambda: CouncilSession(
                 root=root, question=question, models=models, lead_model=lead_model,
-                max_cost=body.get("max_cost"),
+                max_cost=max_cost,
             ),
         )
         return jsonify(payload), status
@@ -362,9 +416,11 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
     @app.post("/api/checkpoints/prune")
     def prune_checkpoints():
         body = request.get_json(silent=True) or {}
-        keep_last = body.get("keep_last")
+        keep_last, err = _parse_number(body.get("keep_last"), "keep_last", int)
+        if err:
+            return err
         checkpoint_manager = CheckpointManager(root)
-        deleted = checkpoint_manager.prune(keep_last=int(keep_last) if keep_last is not None else None)
+        deleted = checkpoint_manager.prune(keep_last=keep_last)
         return jsonify({"deleted": deleted})
 
     # -- runs -- compare-branches -----------------------------------------
@@ -436,6 +492,40 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         memory_store.close()
         return jsonify({"ok": ok})
 
+    @app.get("/api/memory/stale")
+    def stale_memory():
+        days = request.args.get("days", default=DEFAULT_STALE_DAYS, type=int)
+        memory_store = MemoryStore(_memory_db_path())
+        candidates = find_stale_candidates(memory_store, min_days=days)
+        memory_store.close()
+        return jsonify([dict(r) for r in candidates])
+
+    @app.post("/api/memory/stale/archive")
+    def archive_stale_memory():
+        body = request.get_json(silent=True) or {}
+        days, err = _parse_number(body.get("days"), "days", int, default=DEFAULT_STALE_DAYS)
+        if err:
+            return err
+        memory_store = MemoryStore(_memory_db_path())
+        candidates = find_stale_candidates(memory_store, min_days=days)
+        summary = apply_archival(memory_store, candidates)
+        memory_store.close()
+        return jsonify({"archived": summary})
+
+    @app.post("/api/memory/<int:memory_id>/unarchive")
+    def unarchive_memory(memory_id: int):
+        memory_store = MemoryStore(_memory_db_path())
+        ok = memory_store.unarchive(memory_id)
+        memory_store.close()
+        return jsonify({"ok": ok})
+
+    @app.get("/api/memory/archived")
+    def list_archived_memory():
+        memory_store = MemoryStore(_memory_db_path())
+        rows = memory_store.list_archived()
+        memory_store.close()
+        return jsonify([dict(r) for r in rows])
+
     @app.get("/api/memory/stats")
     def memory_stats():
         memory_store = MemoryStore(_memory_db_path())
@@ -461,7 +551,9 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
     @app.post("/api/memory/consolidate")
     def consolidate_memory():
         body = request.get_json(silent=True) or {}
-        threshold = float(body.get("threshold") or FUZZY_DUPLICATE_THRESHOLD)
+        threshold, err = _parse_number(body.get("threshold"), "threshold", float, default=FUZZY_DUPLICATE_THRESHOLD)
+        if err:
+            return err
         dry_run = bool(body.get("dry_run", True))
         memory_store = MemoryStore(_memory_db_path())
         clusters = find_duplicate_clusters(memory_store, threshold=threshold)
@@ -547,6 +639,136 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         rows = action_log_store.session_actions(session_id)
         action_log_store.close()
         return jsonify([dict(r) for r in rows])
+
+    # -- curator ------------------------------------------------------------
+    # Configuration itself goes through the generic /api/config endpoints above
+    # (curator_api_key/curator_model/curator_enabled are plain config keys, same
+    # as any other -- curator_api_key is already masked via _SECRET_CONFIG_KEYS).
+    # These are the curator-specific read/action endpoints.
+
+    @app.get("/api/curator/status")
+    def curator_status():
+        if not curator_configured():
+            return jsonify({"configured": False})
+        result = {"configured": True, "model": curator_model(), "enabled": curator_enabled(), "areas": {}}
+        db_path = _curator_db_path()
+        if db_path.exists():
+            curator_store = CuratorStore(db_path)
+            for area_name in KNOWN_AREAS:
+                watermark = curator_store.get_watermark(area_name)
+                result["areas"][area_name] = (
+                    dict(watermark) if watermark is not None and watermark["last_run_at"] is not None else None
+                )
+            curator_store.close()
+        else:
+            result["areas"] = {name: None for name in KNOWN_AREAS}
+        return jsonify(result)
+
+    @app.post("/api/curator/run")
+    def start_curator_run():
+        # Same guaranteed-no-op guarantee as `mazu curator run`: if unconfigured/
+        # disabled, this returns immediately with no background thread, no
+        # STDOUT_CAPTURE_LOCK contention, and no API call -- checked BEFORE
+        # acquiring the lock so an unconfigured Curator can never block a real
+        # run/explore/council from starting.
+        if not curator_configured():
+            return jsonify({"ran": False, "reason": "not_configured"})
+        if not curator_enabled():
+            return jsonify({"ran": False, "reason": "disabled"})
+
+        body = request.get_json(silent=True) or {}
+        areas = body.get("areas") or None
+        if areas is not None and not isinstance(areas, list):
+            return jsonify({"error": "areas must be a list of area names"}), 400
+
+        max_cost, err = _parse_number(body.get("max_cost"), "max_cost", float)
+        if err:
+            return err
+        max_rounds, err = _parse_number(body.get("max_rounds"), "max_rounds", int, default=8)
+        if err:
+            return err
+
+        payload, status = _start_task(
+            "curator",
+            lambda: CuratorSession(
+                root=root, areas=areas, full=bool(body.get("full", False)),
+                dry_run=bool(body.get("dry_run", False)), max_cost=max_cost,
+                max_rounds=max_rounds,
+            ),
+        )
+        return jsonify(payload), status
+
+    @app.get("/api/curator/log")
+    def curator_log():
+        db_path = _curator_db_path()
+        if not db_path.exists():
+            return jsonify([])
+        curator_store = CuratorStore(db_path)
+        area = request.args.get("area") or None
+        since_days = request.args.get("since_days", type=int)
+        limit = request.args.get("limit", default=50, type=int)
+        rows = curator_store.log_recent(area=area, since_days=since_days, limit=limit)
+        curator_store.close()
+        return jsonify([dict(r) for r in rows])
+
+    @app.get("/api/curator/report")
+    def curator_report():
+        db_path = _curator_db_path()
+        if not db_path.exists():
+            return jsonify({"error": "No curator runs yet in this project."}), 404
+        curator_store = CuratorStore(db_path)
+        run_id = request.args.get("run_id") or None
+        run = curator_store.last_run(run_id)
+        if run is None:
+            curator_store.close()
+            return jsonify({"error": "No matching curator run."}), 404
+        entries = curator_store.log_for_run(run["id"])
+        curator_store.close()
+        return jsonify({"run": dict(run), "entries": [dict(e) for e in entries]})
+
+    @app.post("/api/curator/undo/<int:log_id>")
+    def curator_undo(log_id: int):
+        # Same dispatch table as `mazu curator undo` -- reused directly from
+        # mazu.cli, not reimplemented, so the two surfaces can never quietly
+        # diverge on which actions are safely auto-reversible.
+        from mazu.cli import _CURATOR_UNDO_MEMORY_ACTIONS, _CURATOR_UNDO_SKILL_ACTIONS
+
+        db_path = _curator_db_path()
+        if not db_path.exists():
+            return jsonify({"error": "No curator runs yet in this project."}), 404
+        curator_store = CuratorStore(db_path)
+        row = curator_store.conn.execute("SELECT * FROM curator_log WHERE id = ?", (log_id,)).fetchone()
+        curator_store.close()
+        if row is None:
+            return jsonify({"error": f"No curator log entry with id {log_id}."}), 404
+
+        action = row["action"]
+        if action in _CURATOR_UNDO_MEMORY_ACTIONS:
+            memory_store = MemoryStore(_memory_db_path())
+            ok = getattr(memory_store, _CURATOR_UNDO_MEMORY_ACTIONS[action])(int(row["target_id"]))
+            memory_store.close()
+            return jsonify({"ok": ok, "action": action, "target_id": row["target_id"]})
+        if action in _CURATOR_UNDO_SKILL_ACTIONS:
+            manager = SkillManager(root)
+            ok = getattr(manager, _CURATOR_UNDO_SKILL_ACTIONS[action])(row["target_id"])
+            return jsonify({"ok": ok, "action": action, "target_id": row["target_id"]})
+        return jsonify({
+            "ok": False, "action": action,
+            "reversal_hint": row["reversal_hint"],
+            "message": "No automatic undo for this action." + (
+                " See reversal_hint for manual guidance." if row["reversal_hint"] else ""
+            ),
+        })
+
+    @app.post("/api/curator/enable")
+    def curator_enable():
+        set_config_value("curator_enabled", "true")
+        return jsonify({"ok": True, "enabled": True})
+
+    @app.post("/api/curator/disable")
+    def curator_disable():
+        set_config_value("curator_enabled", "false")
+        return jsonify({"ok": True, "enabled": False})
 
     # -- config -----------------------------------------------------------
 
