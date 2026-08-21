@@ -15,6 +15,7 @@ Full parity with the terminal command surface -- every route calls straight into
 - **Checkpoints** -- timeline, diff, compare, inspect, prune, branch-from, and one-click rollback.
 - **Memory** -- search, pin/unpin, edit, forget, stats, "why would this retrieve", find/merge duplicates.
 - **Skills**, **Runs** (+ compare-branches), **Router**, **Usage**, **Action log**, **Models**, **Doctor**, **Config** -- all full read (and write, where the CLI itself allows it).
+- **Curator** -- an opt-in, fully autonomous background process that maintains Mazu's own state (memory, skills, run/checkpoint history, usage, config, council roster, action log) using its own, completely separate API key, matching `mazu curator ...`. Inert until configured; every mutation is reversible and logged with a rationale.
 - **Init / Setup** -- works against a directory that isn't a Mazu project yet; an in-page banner and a Config-tab form do what `mazu init`/`mazu setup` would from the terminal.
 
 Run and Explore and Council share one server-wide lock: all three wrap print()-only agent functions via `sys.stdout` redirection, which is process-global, not thread-local -- two concurrent captures would corrupt each other's output. Starting a second one while the first is still running gets a 409, not a silently queued mess.
@@ -22,10 +23,10 @@ Run and Explore and Council share one server-wide lock: all three wrap print()-o
 ## Install
 
 ```bash
-pip install "mazu-web @ git+https://github.com/turgutino/mazu-web.git"
+pip install mazu-web
 ```
 
-Depends on the core [`mazu`](https://pypi.org/project/mazu/) package (`mazu>=0.21.0`, pulled from PyPI automatically -- `mazu-web` itself isn't on PyPI yet, only installable from this repo for now).
+Depends on the core [`mazu`](https://pypi.org/project/mazu/) package (`mazu>=0.22.0`, pulled from PyPI automatically).
 
 ## Run
 
