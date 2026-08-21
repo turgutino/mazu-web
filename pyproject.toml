@@ -1,6 +1,6 @@
 [project]
 name = "mazu-web"
-version = "0.2.1"
+version = "0.2.2"
 description = "A local browser UI for Mazu -- full command parity with the terminal (chat, run, explore, council, checkpoints, memory, skills, router, usage, log, models, doctor, config, init, setup), streamed."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,7 +22,7 @@ classifiers = [
     "Topic :: Software Development",
 ]
 dependencies = [
-    "mazu>=0.21.0",
+    "mazu>=0.22.0",
     "flask>=3.0",
     "click>=8.1",
 ]
