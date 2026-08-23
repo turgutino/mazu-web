@@ -22,7 +22,7 @@ classifiers = [
     "Topic :: Software Development",
 ]
 dependencies = [
-    "mazu>=0.22.0",
+    "mazu>=0.23.0",
     "flask>=3.0",
     "click>=8.1",
 ]

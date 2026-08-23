@@ -2,7 +2,7 @@
 
 A local browser UI for [Mazu](https://github.com/turgutino/Mazu) -- the core coding-agent CLI stays terminal-first and dependency-light; this is a separate, optional companion for people who'd rather work in a browser tab.
 
-Ships as its own package (`mazu-web`, console script `mazu-web`) so Mazu's core install never pulls in a web framework just to run `mazu chat` in a terminal. Depends on `mazu>=0.22.0`; 108+ tests, kept in sync with the core package's own test suite.
+Ships as its own package (`mazu-web`, console script `mazu-web`) so Mazu's core install never pulls in a web framework just to run `mazu chat` in a terminal. Depends on `mazu>=0.23.0`; 108+ tests, kept in sync with the core package's own test suite.
 
 ## What it does
 
@@ -28,7 +28,7 @@ Run and Explore and Council share one server-wide lock: all three wrap print()-o
 pip install mazu-web
 ```
 
-Depends on the core [`mazu`](https://pypi.org/project/mazu/) package (`mazu>=0.22.0`, pulled from PyPI automatically).
+Depends on the core [`mazu`](https://pypi.org/project/mazu/) package (`mazu>=0.23.0`, pulled from PyPI automatically).
 
 ## Run
 
