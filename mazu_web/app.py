@@ -4,6 +4,7 @@ import queue
 from pathlib import Path
 
 from mazu.action_log.store import ActionLogStore
+from mazu.chat.store import ChatStore
 from mazu.checkpoint.manager import CheckpointManager
 from mazu.config import _SECRET_CONFIG_KEYS, config_path, list_config, set_config_value, unset_config_value
 from mazu.curator.config import curator_configured, curator_enabled, curator_model
@@ -41,25 +42,33 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
     from flask import Flask, Response, jsonify, request, send_from_directory
 
     app = Flask(__name__, static_folder=None)
+    # Mutable holder so /api/project/switch can retarget every route below at
+    # runtime, without restarting the process -- every route past this point reads
+    # project["root"], never the bare `root` parameter (which only seeds the
+    # initial value).
+    project = {"root": root}
     chat_sessions: dict[str, ChatSession] = {}
     task_sessions: dict[str, "RunSession | ExploreSession | CouncilSession"] = {}
     app.sessions = chat_sessions  # exposed for tests; not used by any route itself
     app.task_sessions = task_sessions
 
     def _memory_db_path() -> Path:
-        return root / ".mazu" / "memory.db"
+        return project["root"] / ".mazu" / "memory.db"
 
     def _runs_db_path() -> Path:
-        return root / ".mazu" / "runs.db"
+        return project["root"] / ".mazu" / "runs.db"
 
     def _usage_db_path() -> Path:
         return Path.home() / ".mazu" / "usage.db"
 
     def _action_log_db_path() -> Path:
-        return root / ".mazu" / "action_log.db"
+        return project["root"] / ".mazu" / "action_log.db"
 
     def _curator_db_path() -> Path:
-        return root / ".mazu" / "curator.db"
+        return project["root"] / ".mazu" / "curator.db"
+
+    def _chat_db_path() -> Path:
+        return project["root"] / ".mazu" / "chat_history.db"
 
     def _parse_number(raw, field_name: str, cast, default=None):
         """Real bug found via live testing (on the Curator endpoint, but the same
@@ -94,21 +103,71 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
     @app.get("/api/status")
     def status():
         return jsonify({
-            "root": str(root),
-            "initialized": (root / ".mazu").exists(),
-            "is_git_repo": (root / ".git").exists(),
+            "root": str(project["root"]),
+            "initialized": (project["root"] / ".mazu").exists(),
+            "is_git_repo": (project["root"] / ".git").exists(),
+        })
+
+    @app.get("/api/project/browse")
+    def browse_project():
+        # A minimal server-side directory browser -- the only practical way to give
+        # a plain browser tab (no Electron/native file-system access) an "Open
+        # Folder" experience: list subdirectories of a path, let the client click
+        # into them. Never lists files, never reads file contents.
+        raw = request.args.get("path") or str(project["root"])
+        try:
+            target = Path(raw).expanduser().resolve()
+        except (OSError, RuntimeError) as e:
+            return jsonify({"error": f"Invalid path: {e}"}), 400
+        if not target.exists() or not target.is_dir():
+            return jsonify({"error": f"Not a directory: {target}"}), 400
+        try:
+            dirs = sorted(
+                p.name for p in target.iterdir() if p.is_dir() and not p.name.startswith(".")
+            )
+        except PermissionError:
+            dirs = []
+        return jsonify({
+            "path": str(target),
+            "parent": str(target.parent) if target.parent != target else None,
+            "dirs": dirs,
+        })
+
+    @app.post("/api/project/switch")
+    def switch_project():
+        # Retargets every route in this app at a different directory without
+        # restarting the mazu-web process. Only validates that the path exists and
+        # is a directory -- it does NOT require `mazu init` to already have run
+        # there (the existing init-banner/`/api/init` flow handles that, same as
+        # it does for the directory mazu-web was originally launched from).
+        body = request.get_json(silent=True) or {}
+        raw = (body.get("path") or "").strip()
+        if not raw:
+            return jsonify({"error": "path is required"}), 400
+        try:
+            target = Path(raw).expanduser().resolve()
+        except (OSError, RuntimeError) as e:
+            return jsonify({"error": f"Invalid path: {e}"}), 400
+        if not target.exists() or not target.is_dir():
+            return jsonify({"error": f"Not a directory: {target}"}), 400
+        project["root"] = target
+        return jsonify({
+            "ok": True,
+            "root": str(project["root"]),
+            "initialized": (project["root"] / ".mazu").exists(),
+            "is_git_repo": (project["root"] / ".git").exists(),
         })
 
     @app.post("/api/init")
     def init_project():
         # Mirrors mazu/cli.py's `init` command exactly (same three steps, same
         # idempotency -- safe to call again on an already-initialized project).
-        already_existed = (root / ".mazu").exists()
-        memory_store = MemoryStore(root / ".mazu" / "memory.db")
+        already_existed = (project["root"] / ".mazu").exists()
+        memory_store = MemoryStore(project["root"] / ".mazu" / "memory.db")
         memory_store.close()
-        ensure_gitignore(root)
+        ensure_gitignore(project["root"])
 
-        checkpoint_manager = CheckpointManager(root)
+        checkpoint_manager = CheckpointManager(project["root"])
         was_git_repo = checkpoint_manager.is_git_repo()
         checkpoint_manager.ensure_git_repo()
 
@@ -155,11 +214,11 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         # test fixtures, and for a real user running mazu-web from their home
         # directory) -- a false "already initialized" that skipped the real
         # per-project init steps (memory.db, gitignore, git repo) entirely.
-        was_already_git_repo = (root / ".git").exists()
-        memory_store = MemoryStore(root / ".mazu" / "memory.db")
+        was_already_git_repo = (project["root"] / ".git").exists()
+        memory_store = MemoryStore(project["root"] / ".mazu" / "memory.db")
         memory_store.close()
-        ensure_gitignore(root)
-        checkpoint_manager = CheckpointManager(root)
+        ensure_gitignore(project["root"])
+        checkpoint_manager = CheckpointManager(project["root"])
         checkpoint_manager.ensure_git_repo()
         result["initialized_project"] = not was_already_git_repo
 
@@ -169,9 +228,75 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
 
     @app.post("/api/chat/start")
     def chat_start():
-        session = ChatSession(root=root, model=model, shell_allowlist=shell_allowlist)
+        # Optional {"resume": "<session_id>"} body -- lets the browser survive a
+        # page refresh (or the user picking an old session from a History list)
+        # without losing the conversation. Two cases:
+        #  1. That session is still alive in this server process (chat_sessions
+        #     dict) -- just hand its id back, nothing to reconstruct.
+        #  2. The server restarted (or the session was never in this process at
+        #     all) -- rebuild a fresh ChatSession from ChatStore's saved
+        #     transcript, reusing the SAME session_id so further messages keep
+        #     appending to the same saved history instead of starting a new one.
+        body = request.get_json(silent=True) or {}
+        resume_session_id = body.get("resume")
+        if resume_session_id:
+            existing = chat_sessions.get(resume_session_id)
+            if existing is not None:
+                return jsonify({
+                    "session_id": existing.session_id, "model": existing.resolved_model, "reconnected": True,
+                })
+            chat_store = ChatStore(_chat_db_path())
+            resumed_messages = chat_store.get_messages(resume_session_id)
+            chat_store.close()
+            if not resumed_messages:
+                return jsonify({"error": f"No saved messages found for chat session {resume_session_id}."}), 404
+            session = ChatSession(
+                root=project["root"], model=model, shell_allowlist=shell_allowlist,
+                session_id=resume_session_id, resumed_messages=resumed_messages,
+            )
+            chat_sessions[session.session_id] = session
+            return jsonify({"session_id": session.session_id, "model": session.resolved_model, "reconnected": False})
+
+        session = ChatSession(root=project["root"], model=model, shell_allowlist=shell_allowlist)
         chat_sessions[session.session_id] = session
         return jsonify({"session_id": session.session_id, "model": session.resolved_model})
+
+    @app.get("/api/chat/sessions")
+    def list_chat_sessions():
+        db_path = _chat_db_path()
+        if not db_path.exists():
+            return jsonify([])
+        chat_store = ChatStore(db_path)
+        rows = chat_store.list_sessions(limit=50)
+        chat_store.close()
+        return jsonify([dict(r) for r in rows])
+
+    @app.get("/api/chat/sessions/<session_id>/messages")
+    def get_chat_session_messages(session_id: str):
+        db_path = _chat_db_path()
+        if not db_path.exists():
+            return jsonify([])
+        chat_store = ChatStore(db_path)
+        messages = chat_store.get_messages(session_id)
+        chat_store.close()
+        return jsonify(messages)
+
+    @app.delete("/api/chat/sessions/<session_id>")
+    def delete_chat_session(session_id: str):
+        db_path = _chat_db_path()
+        was_deleted = False
+        if db_path.exists():
+            chat_store = ChatStore(db_path)
+            was_deleted = chat_store.delete_session(session_id)
+            chat_store.close()
+        # If the session is still live in this process, close its background
+        # thread too -- otherwise it keeps running (and could re-create the very
+        # row we just deleted the next time it appends a message) with nothing
+        # left pointing at it.
+        existing = chat_sessions.pop(session_id, None)
+        if existing is not None:
+            existing.close()
+        return jsonify({"ok": True, "was_deleted": was_deleted})
 
     @app.post("/api/chat/<session_id>/message")
     def chat_message(session_id: str):
@@ -249,7 +374,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         payload, status = _start_task(
             "run",
             lambda: RunSession(
-                root=root, task=task, model=body.get("model") or model,
+                root=project["root"], task=task, model=body.get("model") or model,
                 max_steps=max_steps, checkpoint_every=checkpoint_every,
                 allow_shell=bool(body.get("allow_shell", False)),
                 keep_checkpoints=keep_checkpoints,
@@ -280,7 +405,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
             if err:
                 return err
             try:
-                models = _auto_pick_models(root, task, approaches)
+                models = _auto_pick_models(project["root"], task, approaches)
             except Exception as e:
                 return jsonify({"error": str(e)}), 400
         else:
@@ -298,7 +423,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         payload, status = _start_task(
             "explore",
             lambda: ExploreSession(
-                root=root, task=task, models=models,
+                root=project["root"], task=task, models=models,
                 test_command=body.get("test_command") or None,
                 max_cost=max_cost, max_steps=max_steps,
                 from_checkpoint_id=body.get("from_checkpoint") or None,
@@ -324,7 +449,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         payload, status = _start_task(
             "council",
             lambda: CouncilSession(
-                root=root, question=question, models=models, lead_model=lead_model,
+                root=project["root"], question=question, models=models, lead_model=lead_model,
                 max_cost=max_cost,
             ),
         )
@@ -346,7 +471,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
 
     @app.get("/api/checkpoints")
     def list_checkpoints():
-        checkpoint_manager = CheckpointManager(root)
+        checkpoint_manager = CheckpointManager(project["root"])
         return jsonify(checkpoint_manager.timeline_entries())
 
     @app.post("/api/checkpoints")
@@ -354,14 +479,14 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         # Mirrors bare `mazu checkpoint` (no subcommand) -- a manual snapshot with
         # no live conversation to attach, same trigger label ("manual_cli") so it
         # shows up in the timeline indistinguishably from the CLI's own version.
-        ensure_gitignore(root)
-        checkpoint_manager = CheckpointManager(root)
+        ensure_gitignore(project["root"])
+        checkpoint_manager = CheckpointManager(project["root"])
         entry = checkpoint_manager.snapshot(messages=[], trigger="manual_cli")
         return jsonify(entry)
 
     @app.get("/api/checkpoints/<checkpoint_id>/diff")
     def checkpoint_diff(checkpoint_id: str):
-        checkpoint_manager = CheckpointManager(root)
+        checkpoint_manager = CheckpointManager(project["root"])
         try:
             entry, diff_stat = checkpoint_manager.diff_against_current(checkpoint_id)
         except ValueError as e:
@@ -370,7 +495,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
 
     @app.post("/api/checkpoints/<checkpoint_id>/rollback")
     def rollback_checkpoint(checkpoint_id: str):
-        checkpoint_manager = CheckpointManager(root)
+        checkpoint_manager = CheckpointManager(project["root"])
         try:
             result = checkpoint_manager.restore(checkpoint_id)
         except ValueError as e:
@@ -383,7 +508,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         branch_name = (body.get("branch_name") or "").strip()
         if not branch_name:
             return jsonify({"error": "branch_name is required"}), 400
-        checkpoint_manager = CheckpointManager(root)
+        checkpoint_manager = CheckpointManager(project["root"])
         try:
             entry = checkpoint_manager.branch_from(checkpoint_id, branch_name)
         except ValueError as e:
@@ -395,7 +520,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         a, b = request.args.get("a"), request.args.get("b")
         if not a or not b:
             return jsonify({"error": "query params a and b (checkpoint ids) are required"}), 400
-        checkpoint_manager = CheckpointManager(root)
+        checkpoint_manager = CheckpointManager(project["root"])
         try:
             entry_a, entry_b, diff = checkpoint_manager.compare(a, b)
         except ValueError as e:
@@ -404,7 +529,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
 
     @app.get("/api/checkpoints/<checkpoint_id>/inspect")
     def inspect_checkpoint(checkpoint_id: str):
-        checkpoint_manager = CheckpointManager(root)
+        checkpoint_manager = CheckpointManager(project["root"])
         try:
             entry = checkpoint_manager.show_entry(checkpoint_id)
             memory_snapshot = checkpoint_manager.inspect_memory(checkpoint_id)
@@ -419,7 +544,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         keep_last, err = _parse_number(body.get("keep_last"), "keep_last", int)
         if err:
             return err
-        checkpoint_manager = CheckpointManager(root)
+        checkpoint_manager = CheckpointManager(project["root"])
         deleted = checkpoint_manager.prune(keep_last=keep_last)
         return jsonify({"deleted": deleted})
 
@@ -605,12 +730,12 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
 
     @app.get("/api/skills")
     def list_skills():
-        skill_manager = SkillManager(root)
+        skill_manager = SkillManager(project["root"])
         return jsonify(skill_manager.list())
 
     @app.post("/api/skills/<name>/forget")
     def forget_skill(name: str):
-        skill_manager = SkillManager(root)
+        skill_manager = SkillManager(project["root"])
         ok = skill_manager.delete(name)
         return jsonify({"ok": ok})
 
@@ -691,7 +816,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         payload, status = _start_task(
             "curator",
             lambda: CuratorSession(
-                root=root, areas=areas, full=bool(body.get("full", False)),
+                root=project["root"], areas=areas, full=bool(body.get("full", False)),
                 dry_run=bool(body.get("dry_run", False)), max_cost=max_cost,
                 max_rounds=max_rounds,
             ),
@@ -749,7 +874,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
             memory_store.close()
             return jsonify({"ok": ok, "action": action, "target_id": row["target_id"]})
         if action in _CURATOR_UNDO_SKILL_ACTIONS:
-            manager = SkillManager(root)
+            manager = SkillManager(project["root"])
             ok = getattr(manager, _CURATOR_UNDO_SKILL_ACTIONS[action])(row["target_id"])
             return jsonify({"ok": ok, "action": action, "target_id": row["target_id"]})
         return jsonify({
@@ -813,7 +938,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         # fraction of a cent) -- opt-in via query param, default off, same as the
         # CLI's own --live flag defaulting to False.
         live = request.args.get("live") == "true"
-        results = run_diagnostics(root, live=live)
+        results = run_diagnostics(project["root"], live=live)
         return jsonify([dataclasses.asdict(r) for r in results])
 
     return app
