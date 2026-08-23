@@ -2,11 +2,13 @@
 
 A local browser UI for [Mazu](https://github.com/turgutino/Mazu) -- the core coding-agent CLI stays terminal-first and dependency-light; this is a separate, optional companion for people who'd rather work in a browser tab.
 
-Ships as its own package (`mazu-web`, console script `mazu-web`) so Mazu's core install never pulls in a web framework just to run `mazu chat` in a terminal.
+Ships as its own package (`mazu-web`, console script `mazu-web`) so Mazu's core install never pulls in a web framework just to run `mazu chat` in a terminal. Depends on `mazu>=0.22.0`; 108+ tests, kept in sync with the core package's own test suite.
 
 ## What it does
 
 Full parity with the terminal command surface -- every route calls straight into the same `mazu` package classes (`CheckpointManager`, `MemoryStore`, `RunStore`, the router, `run_autonomous`, `run_explore`, `run_council`, diagnostics) the CLI itself uses. This UI is a different way to reach the same operations, not a second implementation of them.
+
+One known exception as of this writing: the core CLI's newer, experimental `mazu memory-belief stats`/`review` commands (observation-only belief-shadow inspection, see the core [README](https://github.com/turgutino/Mazu#belief-shadow-observation-experimental-observation-only--nothing-is-corrected-automatically-yet)) don't have a web equivalent yet -- use the terminal for those specifically until this catches up.
 
 - **Chat** -- the same turn logic as `mazu chat`, streamed over Server-Sent Events instead of printed to a terminal.
 - **Run** -- one-shot autonomous tasks (`mazu run`), streamed.
