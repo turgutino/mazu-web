@@ -1,6 +1,6 @@
 [project]
 name = "mazu-web"
-version = "0.2.2"
+version = "0.3.0"
 description = "A local browser UI for Mazu -- full command parity with the terminal (chat, run, explore, council, checkpoints, memory, skills, curator, router, usage, log, models, doctor, config, init, setup), streamed."
 readme = "README.md"
 requires-python = ">=3.11"
