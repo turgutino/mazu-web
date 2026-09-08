@@ -28,7 +28,7 @@ Run and Explore and Council share one server-wide lock: all three wrap print()-o
 pip install mazu-web
 ```
 
-Depends on the core [`mazu`](https://pypi.org/project/mazu/) package (`mazu[documents]>=0.24.0`, pulled from PyPI automatically) -- note that as of this writing, Mazu 0.24.0 is a GitHub-only release, not yet published to PyPI; install both from source (`pip install -e .` in each repo) until it is.
+Depends on the core [`mazu`](https://pypi.org/project/mazu/) package (`mazu[documents]>=0.24.0`, pulled from PyPI automatically).
 
 ## Run
 
@@ -45,10 +45,7 @@ Binds to `127.0.0.1` only by default -- **there is no authentication**, so don't
 
 ## Development
 
-Until Mazu 0.24.0 is published to PyPI, install it from source first (from a sibling checkout of the [`Mazu`](https://github.com/turgutino/Mazu) repo, or straight from GitHub):
-
 ```bash
-pip install -e "../Mazu[documents]"     # or: pip install "mazu[documents] @ git+https://github.com/turgutino/Mazu.git"
 pip install -e ".[dev]"
 pytest
 ```

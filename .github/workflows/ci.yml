@@ -24,17 +24,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install mazu from GitHub main
-        # Temporary, until Mazu 0.24.0 is published to PyPI: mazu-web's own
-        # dependency floor (mazu[documents]>=0.24.0) can't be satisfied from
-        # PyPI yet (only 0.23.0 is published there), and mazu-web's own code
-        # already imports 0.24.0-only modules (document extraction, live model
-        # discovery, reasoning-effort/vision capability signals). Installing
-        # this first means pip's later dependency resolution for mazu-web finds
-        # the constraint already satisfied instead of failing to resolve it.
-        # Remove this step once Mazu 0.24.0 is on PyPI.
-        run: pip install "mazu[documents] @ git+https://github.com/turgutino/Mazu.git@main"
-
       - name: Install mazu-web with dev dependencies
         run: pip install -e ".[dev]"
 
