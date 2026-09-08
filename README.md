@@ -2,7 +2,7 @@
 
 A local browser UI for [Mazu](https://github.com/turgutino/Mazu) -- the core coding-agent CLI stays terminal-first and dependency-light; this is a separate, optional companion for people who'd rather work in a browser tab.
 
-Ships as its own package (`mazu-web`, console script `mazu-web`) so Mazu's core install never pulls in a web framework just to run `mazu chat` in a terminal. Depends on `mazu>=0.23.0`; 108+ tests, kept in sync with the core package's own test suite.
+Ships as its own package (`mazu-web`, console script `mazu-web`) so Mazu's core install never pulls in a web framework just to run `mazu chat` in a terminal. Depends on `mazu[documents]>=0.24.0`; 140+ tests, kept in sync with the core package's own test suite.
 
 ## What it does
 
@@ -10,9 +10,9 @@ Full parity with the terminal command surface -- every route calls straight into
 
 One known exception as of this writing: the core CLI's newer, experimental `mazu memory-belief stats`/`review` commands (observation-only belief-shadow inspection, see the core [README](https://github.com/turgutino/Mazu#belief-shadow-observation-experimental-observation-only--nothing-is-corrected-automatically-yet)) don't have a web equivalent yet -- use the terminal for those specifically until this catches up.
 
-- **Chat** -- the same turn logic as `mazu chat`, streamed over Server-Sent Events instead of printed to a terminal.
+- **Chat** -- the same turn logic as `mazu chat`, streamed over Server-Sent Events instead of printed to a terminal. Also supports attaching an image or a document (`.docx`/`.pdf`/`.xlsx`/`.pptx`, extracted to plain text), a live per-provider model picker (real API-backed, not a single hardcoded default), and reasoning-effort control for models that support it -- the model and effort controls apply to the session immediately, not just to a brand-new chat, and both warn (rather than silently no-op) when the currently selected model doesn't actually support what's being asked of it.
 - **Run** -- one-shot autonomous tasks (`mazu run`), streamed.
-- **Explore** -- parallel branch comparison (`mazu explore`), streamed.
+- **Explore** -- parallel branch comparison (`mazu explore`), streamed, with a live multi-model picker and a best-effort test-command suggestion (pytest/npm/go/cargo/maven/gradle markers) pre-filling the optional field instead of leaving it blank.
 - **Council** -- ask multiple models independently, one lead synthesizes (`mazu council`), streamed.
 - **Checkpoints** -- timeline, diff, compare, inspect, prune, branch-from, and one-click rollback.
 - **Memory** -- search, pin/unpin, edit, forget, stats, "why would this retrieve", find/merge duplicates.
@@ -28,7 +28,7 @@ Run and Explore and Council share one server-wide lock: all three wrap print()-o
 pip install mazu-web
 ```
 
-Depends on the core [`mazu`](https://pypi.org/project/mazu/) package (`mazu>=0.23.0`, pulled from PyPI automatically).
+Depends on the core [`mazu`](https://pypi.org/project/mazu/) package (`mazu[documents]>=0.24.0`, pulled from PyPI automatically) -- note that as of this writing, Mazu 0.24.0 is a GitHub-only release, not yet published to PyPI; install both from source (`pip install -e .` in each repo) until it is.
 
 ## Run
 
@@ -45,7 +45,10 @@ Binds to `127.0.0.1` only by default -- **there is no authentication**, so don't
 
 ## Development
 
+Until Mazu 0.24.0 is published to PyPI, install it from source first (from a sibling checkout of the [`Mazu`](https://github.com/turgutino/Mazu) repo, or straight from GitHub):
+
 ```bash
+pip install -e "../Mazu[documents]"     # or: pip install "mazu[documents] @ git+https://github.com/turgutino/Mazu.git"
 pip install -e ".[dev]"
 pytest
 ```

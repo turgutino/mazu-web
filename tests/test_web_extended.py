@@ -269,6 +269,24 @@ def test_start_explore_streams_the_formatted_report(project, monkeypatch):
     assert "RANKED REPORT" in lines
 
 
+def test_detect_test_command_finds_a_real_pytest_project(project):
+    tests_dir = project / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_thing.py").write_text("def test_x(): pass\n", encoding="utf-8")
+    app = create_app(project, None, None)
+
+    res = app.test_client().get("/api/explore/detect-test-command")
+    assert res.status_code == 200
+    assert res.get_json() == {"suggestion": "python -m pytest -q"}
+
+
+def test_detect_test_command_returns_none_when_nothing_recognized(project):
+    app = create_app(project, None, None)
+    res = app.test_client().get("/api/explore/detect-test-command")
+    assert res.status_code == 200
+    assert res.get_json() == {"suggestion": None}
+
+
 def test_start_explore_requires_task_and_models(project):
     app = create_app(project, None, None)
     res = app.test_client().post("/api/explore", json={"task": "fix it", "models": ""})

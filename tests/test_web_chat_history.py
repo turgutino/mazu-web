@@ -165,6 +165,39 @@ def test_resume_rebuilds_from_chat_store_when_the_session_is_no_longer_live(proj
     rebuilt.join(timeout=5)
 
 
+def test_resume_rebuilds_using_the_session_s_last_used_model_not_the_server_default(project, monkeypatch):
+    # Real bug found live: rebuilding a session after the process restarted (or
+    # was simply evicted) always fell back to this server's startup --model
+    # override / default_model() -- silently reverting a conversation that had
+    # been switched to a different model mid-chat (via POST .../model, the
+    # Chat page's model chip) back to whatever its FIRST turn used, with no
+    # error or indication anywhere that the model had changed.
+    monkeypatch.setattr(chat_session_module, "run_turn_stream", _end_turn_stream)
+    app = create_app(project, None, None)
+    client = app.test_client()
+    session_id = client.post("/api/chat/start").get_json()["session_id"]
+    original = app.sessions[session_id]
+    client.post(f"/api/chat/{session_id}/message", json={"text": "earlier question"})
+    _wait_for(original.outbox, "turn_done")
+
+    client.post(f"/api/chat/{session_id}/model", json={"model": "deepseek:deepseek-chat"})
+    client.post(f"/api/chat/{session_id}/message", json={"text": "switching models now"})
+    _wait_for(original.outbox, "turn_done")
+    original.close()
+    original.join(timeout=5)
+    del app.sessions[session_id]  # simulates the server having restarted / session evicted
+
+    res = client.post("/api/chat/start", json={"resume": session_id})
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["model"] == "deepseek:deepseek-chat"
+
+    rebuilt = app.sessions[session_id]
+    assert rebuilt.resolved_model == "deepseek:deepseek-chat"
+    rebuilt.close()
+    rebuilt.join(timeout=5)
+
+
 def test_resume_of_a_session_with_no_saved_messages_is_a_clean_404(project):
     app = create_app(project, None, None)
     res = app.test_client().post("/api/chat/start", json={"resume": "never-existed"})

@@ -55,6 +55,82 @@ def _wait_for(outbox, event_type, timeout=10):
     raise AssertionError(f"never saw {event_type}, saw {seen}")
 
 
+def test_reasoning_effort_support_is_model_precise_for_openai(project):
+    # Real bug found live: a per-PROVIDER-only check left the Chat page's
+    # effort chip "active" for openai:gpt-4o (a non-reasoning OpenAI model that
+    # rejects reasoning_effort with a 400) since OpenAI-the-provider does
+    # support the parameter for SOME of its own models (o-series, gpt-5).
+    app = create_app(project, None, None)
+    client = app.test_client()
+    assert client.get("/api/providers/reasoning-effort-support?model=openai:o3-mini").get_json() == {"supported": True}
+    assert client.get("/api/providers/reasoning-effort-support?model=openai:gpt-4o").get_json() == {"supported": False}
+    assert client.get("/api/providers/reasoning-effort-support?model=deepseek:deepseek-chat").get_json() == {"supported": False}
+    assert client.get("/api/providers/reasoning-effort-support?model=anthropic:claude-sonnet-5").get_json() == {"supported": True}
+
+
+def test_reasoning_effort_support_fails_open_for_malformed_or_unknown_input(project):
+    app = create_app(project, None, None)
+    client = app.test_client()
+    assert client.get("/api/providers/reasoning-effort-support").get_json() == {"supported": True}
+    assert client.get("/api/providers/reasoning-effort-support?model=not-a-real-model").get_json() == {"supported": True}
+    assert client.get("/api/providers/reasoning-effort-support?model=nosuchprovider:x").get_json() == {"supported": True}
+
+
+def test_vision_support_reflects_deepseek_s_real_model_split(project):
+    # Real bug found live: attaching an image to a plain deepseek:deepseek-chat
+    # session produced a raw provider error only after sending -- nothing
+    # warned upfront that the model is text-only.
+    app = create_app(project, None, None)
+    client = app.test_client()
+    assert client.get("/api/providers/vision-support?model=deepseek:deepseek-chat").get_json() == {"supported": False}
+    assert client.get("/api/providers/vision-support?model=deepseek:deepseek-v4-flash-vision-exp").get_json() == {"supported": True}
+    assert client.get("/api/providers/vision-support?model=anthropic:claude-sonnet-5").get_json() == {"supported": True}
+
+
+def test_set_config_rejects_a_malformed_council_lead_value(project):
+    # Real bug found live: the generic Config "Set a value" form accepted
+    # council_lead/council_models with zero format validation -- a typo
+    # silently saved to config.toml and only surfaced later as a confusing,
+    # disconnected failure the next time Council actually ran. Validation now
+    # lives in mazu.config.set_config_value (see its own tests for full
+    # coverage); this just confirms the web route surfaces it as a clean 400,
+    # same as any other ValueError from that function.
+    app = create_app(project, None, None)
+    client = app.test_client()
+    res = client.post("/api/config", json={"key": "council_lead", "value": ":claude-opus-4-8"})
+    assert res.status_code == 400
+    assert "malformed" in res.get_json()["error"]
+
+
+def test_cost_trackable_reports_which_models_have_no_pricing_data(project):
+    # Real bug found live: --max-cost is silently a no-op for a model
+    # estimate_cost() has no pricing entry for (a newly-discovered live model
+    # most often), and nothing in the UI said so -- a user could type "$2
+    # limit" and it would just never apply. This endpoint is what the Run/
+    # Explore/Council pages now poll to warn about that before the user starts
+    # a real, unexpectedly-unlimited run.
+    app = create_app(project, None, None)
+    client = app.test_client()
+    res = client.post(
+        "/api/cost-trackable",
+        json={"models": ["anthropic:claude-sonnet-5", "deepseek:deepseek-v4-pro-not-a-real-model"]},
+    )
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data == {
+        "anthropic:claude-sonnet-5": True,
+        "deepseek:deepseek-v4-pro-not-a-real-model": False,
+    }
+
+
+def test_cost_trackable_with_no_models_returns_empty(project):
+    app = create_app(project, None, None)
+    client = app.test_client()
+    res = client.post("/api/cost-trackable", json={"models": []})
+    assert res.status_code == 200
+    assert res.get_json() == {}
+
+
 def test_chat_start_creates_a_session_and_returns_the_resolved_model(project):
     app = create_app(project, None, None)
     client = app.test_client()
@@ -66,6 +142,37 @@ def test_chat_start_creates_a_session_and_returns_the_resolved_model(project):
 
     app.sessions[data["session_id"]].close()
     app.sessions[data["session_id"]].join(timeout=5)
+
+
+def test_chat_set_model_updates_the_live_session_without_a_new_chat(project):
+    # Real bug found live: the Chat page's model chip only ever wrote
+    # config.toml's default_model, which a session already on screen never
+    # re-reads (resolved_model is resolved once in __init__ and reused for
+    # every turn) -- so picking a new model appeared to do nothing until the
+    # user started a brand new chat. This is the fix: a dedicated endpoint that
+    # changes the *current* session's model immediately.
+    app = create_app(project, None, None)
+    client = app.test_client()
+    session_id = client.post("/api/chat/start").get_json()["session_id"]
+    session = app.sessions[session_id]
+    original_model = session.resolved_model
+
+    res = client.post(f"/api/chat/{session_id}/model", json={"model": "openai:gpt-4.1"})
+    assert res.status_code == 200
+    assert res.get_json() == {"ok": True, "model": "openai:gpt-4.1"}
+    assert session.model == "openai:gpt-4.1"
+    assert session.resolved_model == "openai:gpt-4.1"
+    assert session.resolved_model != original_model
+
+    session.close()
+    session.join(timeout=5)
+
+
+def test_chat_set_model_on_unknown_session_returns_404(project):
+    app = create_app(project, None, None)
+    client = app.test_client()
+    res = client.post("/api/chat/does-not-exist/model", json={"model": "openai:gpt-4.1"})
+    assert res.status_code == 404
 
 
 def test_chat_message_streams_deltas_and_ends_the_turn(project, monkeypatch):

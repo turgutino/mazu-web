@@ -80,6 +80,7 @@ class RunSession:
         resume_run_id: str | None,
         from_checkpoint_id: str | None,
         branch_name: str | None,
+        auto_commit_baseline: bool = False,
     ) -> None:
         self.task_id = str(uuid.uuid4())
         self.outbox: "queue.Queue[dict]" = queue.Queue()
@@ -88,6 +89,7 @@ class RunSession:
             args=(
                 root, task, model, max_steps, checkpoint_every, allow_shell, keep_checkpoints,
                 max_cost, shell_allowlist, dry_run, resume_run_id, from_checkpoint_id, branch_name,
+                auto_commit_baseline,
             ),
             daemon=True,
         )
@@ -103,6 +105,7 @@ class RunSession:
     def _run(
         self, root, task, model, max_steps, checkpoint_every, allow_shell, keep_checkpoints,
         max_cost, shell_allowlist, dry_run, resume_run_id, from_checkpoint_id, branch_name,
+        auto_commit_baseline,
     ) -> None:
         load_config()  # see ChatSession._run's comment on why this matters here
         writer = _QueueWriter(self.outbox)
@@ -176,7 +179,7 @@ class RunSession:
                         action_log_store=action_log_store, shell_allowlist=parsed_allowlist, dry_run=dry_run,
                         run_store=run_store, resume_messages=resume_messages,
                         origin_checkpoint_id=origin_checkpoint_id, parent_run_id=parent_run_id,
-                        branch_name=branch_name,
+                        branch_name=branch_name, auto_commit_baseline=auto_commit_baseline,
                     )
                 finally:
                     memory_store.close()

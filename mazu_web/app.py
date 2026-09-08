@@ -1,3 +1,4 @@
+import base64
 import dataclasses
 import json
 import queue
@@ -11,7 +12,12 @@ from mazu.curator.config import curator_configured, curator_enabled, curator_mod
 from mazu.curator.orchestrator import KNOWN_AREAS
 from mazu.curator.store import CuratorStore
 from mazu.diagnostics import check_live_api_key, ensure_gitignore, run_diagnostics
+from mazu.files.document_extract import DocumentExtractionError, extract_document_text
 from mazu.llm.capabilities import list_capabilities
+from mazu.llm.client import list_models
+from mazu.llm.errors import MazuAPIError
+from mazu.llm.pricing import estimate_cost
+from mazu.runs.detect_test_command import detect_test_command
 from mazu.memory.consolidate import apply_consolidation, find_duplicate_clusters
 from mazu.memory.retrieval import explain_retrieval
 from mazu.memory.staleness import DEFAULT_STALE_DAYS, apply_archival, find_stale_candidates
@@ -33,13 +39,138 @@ def _mask_secret(value: str) -> str:
     return "*" * (len(value) - 4) + value[-4:]
 
 
+# Anthropic's own documented set of base64 image media types (the canonical
+# format every provider converter in mazu/llm/providers/* is written against --
+# see each converter's own docstring). Not every provider/model actually
+# supports vision, but that's left to surface as a normal provider-side error
+# at request time, same as picking an unsupported model string.
+_ALLOWED_CHAT_IMAGE_MEDIA_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+# Base64 inflates size by ~4/3 -- 7,000,000 chars decodes to a bit over 5 MiB,
+# a generous per-image cap that still keeps a single browser upload well clear
+# of default request-body limits and avoids ballooning chat_history.db with a
+# single pasted screenshot.
+_MAX_CHAT_IMAGE_BASE64_CHARS = 7_000_000
+
+
+def _validate_chat_images(images: list) -> str | None:
+    """Returns an error message string if `images` (the raw JSON body value) is
+    malformed or violates a limit, else None. Deliberately rejects before ever
+    reaching ChatSession.send() -- a bad media_type or oversized payload should
+    be a clean 400 to the browser, not something that fails deep inside a
+    provider's SDK call several turns later.
+    """
+    if not isinstance(images, list):
+        return "images must be a list"
+    for img in images:
+        if not isinstance(img, dict):
+            return "each image must be an object with media_type and data"
+        media_type = img.get("media_type")
+        data = img.get("data")
+        if media_type not in _ALLOWED_CHAT_IMAGE_MEDIA_TYPES:
+            return f"unsupported image media_type '{media_type}' (allowed: {', '.join(sorted(_ALLOWED_CHAT_IMAGE_MEDIA_TYPES))})"
+        if not isinstance(data, str) or not data:
+            return "image data must be a non-empty base64 string"
+        if len(data) > _MAX_CHAT_IMAGE_BASE64_CHARS:
+            return "image too large (max ~5MB per image)"
+    return None
+
+
+# Documents can legitimately be bigger than a screenshot -- 20,000,000 base64
+# chars decodes to a bit under 15 MiB, generous for a real .docx/.pdf/.xlsx
+# without letting a single upload balloon chat_history.db or a turn's context.
+_MAX_CHAT_FILE_BASE64_CHARS = 20_000_000
+
+
+def _validate_and_extract_chat_files(files: list) -> tuple[list, str | None]:
+    """Validates AND extracts text from each uploaded file in one pass, unlike
+    images (whose base64 passes straight through to the provider unchanged) --
+    a document's raw bytes are useless to any provider (see mazu/files/
+    document_extract.py's module docstring), so extraction has to happen here,
+    before the file is ever handed to ChatSession.send(). Returns
+    (extracted, error): on error `extracted` is always [] and the caller must
+    reject the whole request with a 400 rather than send a partially-processed
+    batch -- same contract as _validate_chat_images.
+    """
+    if not isinstance(files, list):
+        return [], "files must be a list"
+    extracted = []
+    for f in files:
+        if not isinstance(f, dict):
+            return [], "each file must be an object with filename and data"
+        filename = f.get("filename")
+        data_b64 = f.get("data")
+        if not isinstance(filename, str) or not filename.strip():
+            return [], "each file must have a non-empty filename"
+        if not isinstance(data_b64, str) or not data_b64:
+            return [], f"file '{filename}' data must be a non-empty base64 string"
+        if len(data_b64) > _MAX_CHAT_FILE_BASE64_CHARS:
+            return [], f"file '{filename}' is too large (max ~15MB)"
+        try:
+            raw = base64.b64decode(data_b64, validate=True)
+        except Exception:
+            return [], f"file '{filename}' has invalid base64 data"
+        try:
+            text = extract_document_text(filename, raw)
+        except DocumentExtractionError as e:
+            return [], str(e)
+        extracted.append({"filename": filename, "text": text})
+    return extracted, None
+
+
+_RECENT_PROJECTS_LIMIT = 8
+
+
+def _recent_projects_path() -> Path:
+    # Deliberately NOT under ~/.mazu/ -- writing there would create that directory
+    # as a side effect (path.parent.mkdir() in _remember_recent_project below), and
+    # /api/status's "initialized" check is exactly `(root / ".mazu").exists()`. When
+    # HOME coincides with a project root (this project's own test fixtures do that on
+    # purpose, and so does a real user running mazu-web from their home directory),
+    # that side effect previously made an uninitialized project falsely report
+    # initialized=True -- caught by a real test failure, not just reasoning about it.
+    # A flat dotfile directly in $HOME can't collide with any project's own .mazu/.
+    return Path.home() / ".mazu-web-recent-projects.json"
+
+
+def _load_recent_projects() -> list[str]:
+    path = _recent_projects_path()
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _remember_recent_project(root: Path) -> None:
+    # Most-recent-first, deduped, capped -- so the Config tab's "Recent projects"
+    # list can offer a one-click way back to a project after `/api/project/switch`
+    # retargets mazu-web elsewhere, without touching ~/.mazu/config.toml (whose
+    # writer only supports flat string values, not a list).
+    path = _recent_projects_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entries = [p for p in _load_recent_projects() if p != str(root)]
+    entries.insert(0, str(root))
+    path.write_text(json.dumps(entries[:_RECENT_PROJECTS_LIMIT]), encoding="utf-8")
+
+
 def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None):
     """Builds the Flask app for mazu-web. Every store/manager here is opened fresh
     per request (or per session, for chat/run/explore) and closed immediately --
     the same lifetime the CLI commands themselves give these classes, just behind
     HTTP instead of a single terminal invocation.
     """
+    import os
+
     from flask import Flask, Response, jsonify, request, send_from_directory
+
+    # Read by mazu.agent.prompts._network_privacy_paragraph() so the system prompt
+    # correctly describes itself as running through a local server (this one) rather
+    # than the terminal-only "there is no server" claim that's true for `mazu chat`/
+    # `mazu run` run directly. Set here (not in mazu_web/cli.py's main()) so it also
+    # applies when a test calls create_app() directly, bypassing the CLI entry point.
+    os.environ["MAZU_WEB_SURFACE"] = "1"
 
     app = Flask(__name__, static_folder=None)
     # Mutable holder so /api/project/switch can retarget every route below at
@@ -47,6 +178,7 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
     # project["root"], never the bare `root` parameter (which only seeds the
     # initial value).
     project = {"root": root}
+    _remember_recent_project(root)
     chat_sessions: dict[str, ChatSession] = {}
     task_sessions: dict[str, "RunSession | ExploreSession | CouncilSession"] = {}
     app.sessions = chat_sessions  # exposed for tests; not used by any route itself
@@ -151,12 +283,20 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         if not target.exists() or not target.is_dir():
             return jsonify({"error": f"Not a directory: {target}"}), 400
         project["root"] = target
+        _remember_recent_project(target)
         return jsonify({
             "ok": True,
             "root": str(project["root"]),
             "initialized": (project["root"] / ".mazu").exists(),
             "is_git_repo": (project["root"] / ".git").exists(),
         })
+
+    @app.get("/api/project/recent")
+    def recent_projects():
+        # Excludes the current root -- this list is "places to switch TO", and
+        # showing the project you're already in as a switch target is just clutter.
+        current = str(project["root"])
+        return jsonify({"projects": [p for p in _load_recent_projects() if p != current]})
 
     @app.post("/api/init")
     def init_project():
@@ -193,6 +333,17 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         set_config_value(f"{provider_name}_api_key", api_key)
         result = {"ok": True, "saved_to": str(config_path())}
 
+        # Real bug found live: this endpoint used to run verify and set_default
+        # unconditionally, one after the other, regardless of what verify found --
+        # a rejected key ("fail") could still get set as default_model in the same
+        # call, silently breaking Chat/Run for that provider. The terminal wizard
+        # (setup_wizard in mazu/cli.py) avoids this because it's interactive: the
+        # human SEES the [FAIL] line before being asked "Set X as default?" and can
+        # decline. This endpoint has no such pause, so it makes the safe choice for
+        # them instead -- skip set_default on a definite "fail" (the key itself was
+        # rejected), but still proceed on "warn" (an ambiguous, possibly transient,
+        # non-auth error -- not evidence the key is actually bad).
+        verify_failed = False
         if body.get("verify"):
             import os
 
@@ -200,11 +351,17 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
             os.environ[env_var] = api_key
             check = check_live_api_key(provider_name, _PROVIDER_DEFAULT_MODELS[provider_name])
             result["verify"] = {"status": check.status, "message": check.message}
+            verify_failed = check.status == "fail"
 
-        if body.get("set_default"):
+        if body.get("set_default") and not verify_failed:
             default_model_choice = _PROVIDER_DEFAULT_MODELS[provider_name]
             set_config_value("default_model", default_model_choice)
             result["default_model"] = default_model_choice
+        elif body.get("set_default") and verify_failed:
+            result["default_model_skipped"] = (
+                "Not set as default -- the key was rejected by the live API call above. "
+                "Fix the key and save again, or set default_model manually from Config."
+            )
 
         # Unconditional and idempotent (same as /api/init), not gated on whether
         # root/.mazu already "looks" initialized -- that check is unreliable here
@@ -239,27 +396,48 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         #     appending to the same saved history instead of starting a new one.
         body = request.get_json(silent=True) or {}
         resume_session_id = body.get("resume")
+        auto_approve = bool(body.get("auto_approve", False))
         if resume_session_id:
             existing = chat_sessions.get(resume_session_id)
             if existing is not None:
                 return jsonify({
                     "session_id": existing.session_id, "model": existing.resolved_model, "reconnected": True,
+                    "auto_approve": existing.auto_approve,
                 })
             chat_store = ChatStore(_chat_db_path())
             resumed_messages = chat_store.get_messages(resume_session_id)
+            stored_session = chat_store.get_session(resume_session_id)
             chat_store.close()
             if not resumed_messages:
                 return jsonify({"error": f"No saved messages found for chat session {resume_session_id}."}), 404
+            # Real bug found live: without this, resuming a session whose server
+            # process had restarted (or was never live here) always fell back to
+            # this server's startup --model override / default_model(), silently
+            # reverting a conversation that had been switched to a different model
+            # mid-chat (via the model chip / set_model()) back to whatever its
+            # FIRST turn used -- with no error or indication anywhere that the
+            # model had changed. The server's own --model override (if the admin
+            # set one) still wins, matching the terminal `mazu chat --model
+            # --resume` precedence.
+            resume_model = model or (stored_session["model"] if stored_session else None)
             session = ChatSession(
-                root=project["root"], model=model, shell_allowlist=shell_allowlist,
-                session_id=resume_session_id, resumed_messages=resumed_messages,
+                root=project["root"], model=resume_model, shell_allowlist=shell_allowlist,
+                session_id=resume_session_id, resumed_messages=resumed_messages, auto_approve=auto_approve,
             )
             chat_sessions[session.session_id] = session
-            return jsonify({"session_id": session.session_id, "model": session.resolved_model, "reconnected": False})
+            return jsonify({
+                "session_id": session.session_id, "model": session.resolved_model, "reconnected": False,
+                "auto_approve": session.auto_approve,
+            })
 
-        session = ChatSession(root=project["root"], model=model, shell_allowlist=shell_allowlist)
+        session = ChatSession(
+            root=project["root"], model=model, shell_allowlist=shell_allowlist, auto_approve=auto_approve,
+        )
         chat_sessions[session.session_id] = session
-        return jsonify({"session_id": session.session_id, "model": session.resolved_model})
+        return jsonify({
+            "session_id": session.session_id, "model": session.resolved_model,
+            "auto_approve": session.auto_approve,
+        })
 
     @app.get("/api/chat/sessions")
     def list_chat_sessions():
@@ -303,8 +481,20 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         session = chat_sessions.get(session_id)
         if session is None:
             return jsonify({"error": "unknown session"}), 404
-        text = (request.get_json(silent=True) or {}).get("text", "")
-        session.send(text)
+        body = request.get_json(silent=True) or {}
+        text = body.get("text", "")
+        images = body.get("images") or []
+        files = body.get("files") or []
+        if images:
+            error = _validate_chat_images(images)
+            if error is not None:
+                return jsonify({"error": error}), 400
+        extracted_files = []
+        if files:
+            extracted_files, error = _validate_and_extract_chat_files(files)
+            if error is not None:
+                return jsonify({"error": error}), 400
+        session.send(text, images=images, files=extracted_files)
         return jsonify({"ok": True})
 
     @app.post("/api/chat/<session_id>/confirm")
@@ -315,6 +505,24 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
         approved = bool((request.get_json(silent=True) or {}).get("approved", False))
         session.answer_confirm(approved)
         return jsonify({"ok": True})
+
+    @app.post("/api/chat/<session_id>/auto_approve")
+    def chat_set_auto_approve(session_id: str):
+        session = chat_sessions.get(session_id)
+        if session is None:
+            return jsonify({"error": "unknown session"}), 404
+        enabled = bool((request.get_json(silent=True) or {}).get("enabled", False))
+        session.set_auto_approve(enabled)
+        return jsonify({"ok": True, "auto_approve": session.auto_approve})
+
+    @app.post("/api/chat/<session_id>/model")
+    def chat_set_model(session_id: str):
+        session = chat_sessions.get(session_id)
+        if session is None:
+            return jsonify({"error": "unknown session"}), 404
+        new_model = (request.get_json(silent=True) or {}).get("model") or None
+        session.set_model(new_model)
+        return jsonify({"ok": True, "model": session.resolved_model})
 
     @app.get("/api/chat/<session_id>/events")
     def chat_events(session_id: str):
@@ -384,9 +592,19 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
                 resume_run_id=resume_run_id,
                 from_checkpoint_id=from_checkpoint_id,
                 branch_name=branch_name,
+                auto_commit_baseline=bool(body.get("auto_commit_baseline", False)),
             ),
         )
         return jsonify(payload), status
+
+    @app.get("/api/explore/detect-test-command")
+    def explore_detect_test_command():
+        # Read-only: detect_test_command() only stats/reads a handful of small
+        # marker files (pytest.ini, package.json, ...) -- it never executes
+        # anything. The frontend shows this as a "Detected: ... [Use it]"
+        # suggestion the user must explicitly click, never auto-applied.
+        suggestion = detect_test_command(project["root"])
+        return jsonify({"suggestion": suggestion})
 
     @app.post("/api/explore")
     def start_explore():
@@ -931,6 +1149,99 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
     def models_info():
         rows = list_capabilities()
         return jsonify([dataclasses.asdict(r) for r in rows])
+
+    @app.post("/api/cost-trackable")
+    def cost_trackable():
+        # Backs the "max cost" warning on Run/Explore/Council: --max-cost is
+        # silently ignored (see mazu/agent/autonomous.py's cost_trackable check)
+        # for any model estimate_cost() has no pricing entry for -- a newly
+        # discovered live model most often, since mazu/llm/pricing.py is a
+        # static, hand-maintained table. Real bug found live: a user could type
+        # "$2 limit" against such a model and it would simply never apply, with
+        # no indication anywhere that it hadn't. Checked with (0, 0) tokens,
+        # same as autonomous.py's own cost_trackable flag -- estimate_cost only
+        # returns None based on whether the model has ANY pricing entry, not
+        # the token counts passed in.
+        body = request.get_json(silent=True) or {}
+        models = [m for m in (body.get("models") or []) if m]
+        return jsonify({m: estimate_cost(m, 0, 0) is not None for m in models})
+
+    @app.get("/api/providers/capabilities")
+    def provider_capabilities():
+        # Read straight off the same Provider singletons run_turn/run_turn_stream
+        # actually use (mazu.llm.client._PROVIDERS) -- a hand-maintained duplicate
+        # table would drift the moment a provider's supports_reasoning_effort
+        # changes, silently un-fixing the "decorative dropdown" bug this exists to
+        # prevent. Lets the Chat page's effort chip disable itself for providers
+        # (DeepSeek, local) that accept the value but silently ignore it server-side.
+        from mazu.llm.client import _PROVIDERS
+
+        return jsonify({
+            name: {"supports_reasoning_effort": provider.supports_reasoning_effort}
+            for name, provider in _PROVIDERS.items()
+        })
+
+    @app.get("/api/providers/reasoning-effort-support")
+    def reasoning_effort_support():
+        # Finer-grained than /api/providers/capabilities above: that endpoint is
+        # per-PROVIDER (DeepSeek/local never support reasoning_effort at all), but
+        # OpenAI's own API only accepts it for its actual reasoning-model families
+        # (o-series, gpt-5) -- a plain chat model like gpt-4o rejects it with a
+        # 400. Real bug found live: the Chat page's effort chip disabled itself
+        # correctly per-provider but still showed "active" for openai:gpt-4o,
+        # where picking an effort level surfaced a raw provider 400 instead of
+        # ever being disabled. Calls Provider.supports_reasoning_effort_for(),
+        # the same method (with the same fail-open, best-effort character) run_turn
+        # itself doesn't consult -- this is a UI-only signal, not a request gate.
+        from mazu.llm.client import _PROVIDERS, _split_model
+
+        model = request.args.get("model", "")
+        if not model or ":" not in model:
+            return jsonify({"supported": True})
+        provider_name, model_name = _split_model(model)
+        provider = _PROVIDERS.get(provider_name)
+        if provider is None:
+            return jsonify({"supported": True})
+        return jsonify({"supported": provider.supports_reasoning_effort_for(model_name)})
+
+    @app.get("/api/providers/vision-support")
+    def vision_support():
+        # Backs the Chat page's attach-button warning: real bug found live,
+        # attaching an image while chatting with a text-only model (e.g. plain
+        # deepseek:deepseek-chat) produced a raw provider error only after
+        # sending, with no upfront indication the model can't see images at all.
+        # Best-effort/fail-open (see Provider.supports_vision_for's docstring) --
+        # a UI signal, not a request gate.
+        from mazu.llm.client import _PROVIDERS, _split_model
+
+        model = request.args.get("model", "")
+        if not model or ":" not in model:
+            return jsonify({"supported": True})
+        provider_name, model_name = _split_model(model)
+        provider = _PROVIDERS.get(provider_name)
+        if provider is None:
+            return jsonify({"supported": True})
+        return jsonify({"supported": provider.supports_vision_for(model_name)})
+
+    @app.get("/api/models/<provider_name>/live")
+    def live_models(provider_name: str):
+        # Distinct from /api/models above: that one is the static, hand-maintained
+        # capability table (mazu/llm/capabilities.py); this one calls the
+        # provider's own API right now and returns exactly the models the
+        # currently configured key can actually use -- lets the Config page offer
+        # a real picker (e.g. deepseek-chat vs deepseek-reasoner) instead of
+        # Mazu guessing a single hardcoded default per provider.
+        from mazu.config import load_config
+        from mazu.llm.client import _PROVIDERS
+
+        if provider_name not in _PROVIDERS:
+            return jsonify({"error": "unknown provider '" + provider_name + "'"}), 400
+        load_config()
+        try:
+            models = list_models(provider_name)
+        except (NotImplementedError, MazuAPIError) as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify({"models": models})
 
     @app.get("/api/doctor")
     def doctor():

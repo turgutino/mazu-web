@@ -4,141 +4,338 @@
 <meta charset="utf-8">
 <title>mazu web</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <style>
   :root {
-    --bg: #000000;
-    --bg-raised: #0d0d0d;
-    --bg-panel: #111111;
-    --border: #2a2a2a;
-    --border-bright: #4a4a4a;
-    --text: #f2f2f2;
-    --muted: #7a7a7a;
-    --dim: #4d4d4d;
-    --ok: #e8e8e8;
-    --bad: #ff5c5c;
+    --font: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 10px;
+    --radius-sm: 7px;
+
+    /* dark (default) -- warm charcoal, terminal-green accent, real depth */
+    --bg: #0a0c0a;
+    --bg-raised: #121513;
+    --bg-panel: #171b18;
+    --bg-hover: #16301f;
+    --border: #2a322c;
+    --border-bright: #414d43;
+    --text: #e4e7e3;
+    --text-strong: #fbfffc;
+    --muted: #8c9490;
+    --dim: #5c6560;
+    --accent: #4ade80;
+    --accent-2: #22c55e;
+    --accent-hover: #6ee89a;
+    --accent-contrast: #06120a;
+    --accent-soft: #163a24;
+    --accent-soft-border: #2f6b45;
+    --ok: #4ade80;
+    --bad: #ff6b6b;
     --warn: #ffb84d;
-    --mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --overlay-1: rgba(255,255,255,0.03);
+    --overlay-2: rgba(255,255,255,0.07);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-md: 0 8px 28px rgba(0,0,0,0.45);
+    --glow: 0 0 0 1px rgba(74,222,128,0.16), 0 6px 24px rgba(74,222,128,0.22);
+    --page-glow:
+      radial-gradient(680px circle at 12% -8%, rgba(74,222,128,0.10), transparent 55%),
+      radial-gradient(520px circle at 100% 15%, rgba(74,222,128,0.05), transparent 60%);
+  }
+  :root[data-theme="light"] {
+    --bg: #f3f5f1;
+    --bg-raised: #ffffff;
+    --bg-panel: #ffffff;
+    --bg-hover: #e0f5e7;
+    --border: #d7dcd3;
+    --border-bright: #b7c0b3;
+    --text: #191d19;
+    --text-strong: #060a07;
+    --muted: #555e55;
+    --dim: #949c92;
+    --accent: #159c48;
+    --accent-2: #0e7a37;
+    --accent-hover: #0f7a38;
+    --accent-contrast: #ffffff;
+    --accent-soft: #dff5e6;
+    --accent-soft-border: #8fdba9;
+    --ok: #15803d;
+    --bad: #dc2626;
+    --warn: #b45309;
+    --overlay-1: rgba(0,0,0,0.03);
+    --overlay-2: rgba(0,0,0,0.055);
+    --shadow-sm: 0 1px 2px rgba(20,40,25,0.06);
+    --shadow-md: 0 10px 28px rgba(20,40,25,0.10);
+    --glow: 0 0 0 1px rgba(21,156,72,0.15), 0 6px 20px rgba(21,156,72,0.16);
+    --page-glow:
+      radial-gradient(680px circle at 12% -8%, rgba(21,156,72,0.08), transparent 55%),
+      radial-gradient(520px circle at 100% 15%, rgba(21,156,72,0.04), transparent 60%);
   }
   * { box-sizing: border-box; }
+  html { background: var(--bg); }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 13px/1.55 var(--mono);
+    margin: 0; background: var(--page-glow), var(--bg); color: var(--text);
+    font: 13px/1.6 var(--font);
     height: 100vh; display: flex; overflow: hidden;
-    letter-spacing: 0.01em;
+    transition: background-color 0.15s ease, color 0.15s ease;
   }
-  ::selection { background: var(--text); color: var(--bg); }
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-thumb { background: var(--border-bright); }
-  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::selection { background: var(--accent-soft-border); color: var(--text-strong); }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
 
   /* ---- sidebar ---- */
   #sidebar {
-    width: 208px; flex-shrink: 0; background: var(--bg-raised);
+    width: 226px; flex-shrink: 0; background: var(--bg-raised);
     border-right: 1px solid var(--border);
     display: flex; flex-direction: column;
   }
   #brand {
-    padding: 18px 16px 14px; border-bottom: 1px solid var(--border);
+    padding: 19px 16px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
   }
-  #brand .name { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
-  #brand .sub { color: var(--dim); font-size: 10px; margin-top: 3px; letter-spacing: 0.08em; text-transform: uppercase; }
-  #nav { flex: 1; overflow-y: auto; padding: 10px 0; }
+  #brand .brand-left { display: flex; align-items: center; gap: 10px; }
+  #brand .logo {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 12.5px; color: var(--accent-contrast); flex-shrink: 0;
+  }
+  #brand .name { font-size: 14.5px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-strong); }
+  #brand .name .cursor { color: var(--accent); }
+  #brand .sub { color: var(--dim); font-size: 10px; margin-top: 2px; letter-spacing: 0.03em; }
+  #theme-toggle, #lang-toggle {
+    width: 27px; height: 27px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--bg-panel); color: var(--muted); display: flex; align-items: center;
+    justify-content: center; cursor: pointer; flex-shrink: 0; font: inherit; font-size: 11px; font-weight: 700;
+  }
+  #theme-toggle:hover, #lang-toggle:hover { color: var(--accent); border-color: var(--accent-soft-border); background: var(--accent-soft); }
+  #nav { flex: 1; overflow-y: auto; padding: 12px 10px; }
   #nav button {
     display: flex; align-items: center; gap: 10px; width: 100%;
-    background: none; border: none; border-left: 2px solid transparent;
-    color: var(--muted); padding: 9px 16px; cursor: pointer;
-    font: inherit; font-size: 12px; text-align: left; letter-spacing: 0.03em;
-    text-transform: uppercase;
+    background: none; border: none; border-left: 2px solid transparent; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: var(--muted); padding: 7px 10px 7px 8px; cursor: pointer; margin-bottom: 1px;
+    font: inherit; font-size: 12.5px; text-align: left;
   }
-  #nav button:hover { color: var(--text); background: rgba(255,255,255,0.03); }
-  #nav button.active { color: var(--text); border-left-color: var(--text); background: rgba(255,255,255,0.05); font-weight: 600; }
-  #nav .glyph { width: 14px; text-align: center; opacity: 0.85; }
-  #nav .divider { height: 1px; background: var(--border); margin: 8px 16px; }
+  #nav button:hover { color: var(--text); background: var(--overlay-1); }
+  #nav button.active {
+    color: var(--text-strong); background: var(--bg-hover); font-weight: 600;
+    border-left-color: var(--accent);
+  }
+  #nav button.active .glyph { color: var(--accent); }
+  #nav .glyph { width: 15px; text-align: center; opacity: 0.9; flex-shrink: 0; }
+  #nav .divider { height: 1px; background: var(--border); margin: 10px 8px; }
   #status-strip {
-    padding: 10px 16px 14px; border-top: 1px solid var(--border);
-    font-size: 10px; color: var(--dim); letter-spacing: 0.05em;
+    padding: 12px 16px 14px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--dim);
   }
-  #status-strip .row { display: flex; justify-content: space-between; margin-top: 3px; gap: 8px; }
-  #root-badge { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
-  #busy-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--dim); margin-right: 5px; }
-  #busy-dot.on { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+  #status-strip .row { display: flex; justify-content: space-between; margin-top: 5px; gap: 8px; }
+  #status-strip .row:first-child { margin-top: 0; }
+  #root-badge { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; color: var(--muted); }
+  #busy-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--dim); margin-right: 6px; }
+  #busy-dot.on { background: var(--warn); box-shadow: 0 0 9px var(--warn); }
 
   /* ---- main ---- */
   main { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
   .tab { display: none; flex: 1; overflow: hidden; flex-direction: column; }
   .tab.active { display: flex; }
   .tab-header {
-    padding: 16px 24px 12px; border-bottom: 1px solid var(--border);
+    padding: 16px 26px 14px; border-bottom: 1px solid var(--border);
     display: flex; align-items: baseline; gap: 12px; flex-shrink: 0;
   }
-  .tab-header h1 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin: 0; font-weight: 700; }
-  .tab-header .hint { color: var(--dim); font-size: 11px; }
-  .tab-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  .tab-header h1 { font-size: 16px; margin: 0; font-weight: 700; letter-spacing: -0.01em; color: var(--text-strong); }
+  .tab-header .hint { color: var(--dim); font-size: 11.5px; }
+  .tab-body { flex: 1; overflow-y: auto; padding: 24px 26px; }
 
   /* ---- generic elements ---- */
   button.btn {
-    background: var(--text); color: var(--bg); border: 1px solid var(--text);
-    font: inherit; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
-    padding: 8px 16px; cursor: pointer; font-weight: 700;
+    background: var(--accent); color: var(--accent-contrast);
+    border: 1px solid var(--accent); border-radius: var(--radius-sm);
+    font: inherit; font-size: 13px; font-weight: 600; letter-spacing: -0.005em;
+    height: 34px; padding: 0 16px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    transition: background-color 0.12s ease, border-color 0.12s ease, transform 0.08s ease;
   }
-  button.btn:hover { background: #d0d0d0; }
-  button.btn:disabled { background: var(--dim); border-color: var(--dim); color: var(--bg); cursor: not-allowed; }
-  button.btn.ghost { background: transparent; color: var(--text); }
-  button.btn.ghost:hover { background: rgba(255,255,255,0.08); }
-  button.btn.danger { background: var(--bad); border-color: var(--bad); color: #000; }
-  button.btn.small { padding: 4px 10px; font-size: 10px; }
+  button.btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.btn:active { transform: scale(0.98); }
+  button.btn:disabled { background: var(--overlay-2); border-color: var(--border); color: var(--dim); cursor: not-allowed; transform: none; }
+  button.btn.ghost {
+    background: transparent; color: var(--text); border: 1px solid var(--border-bright);
+  }
+  button.btn.ghost:hover { background: var(--overlay-2); border-color: var(--text); color: var(--text-strong); }
+  button.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+  button.btn.small { height: 28px; padding: 0 12px; font-size: 12px; }
 
   input[type=text], input[type=number], input[type=password], textarea, select {
     background: var(--bg-panel); border: 1px solid var(--border); color: var(--text);
-    font: inherit; font-size: 12px; padding: 8px 10px; width: 100%;
+    border-radius: var(--radius-sm);
+    font: inherit; font-size: 12.5px; padding: 8px 11px; width: 100%;
   }
-  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--border-bright); }
-  label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 5px; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  label { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
   .field { margin-bottom: 14px; }
   .field-row { display: flex; gap: 14px; }
   .field-row .field { flex: 1; }
-  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-  .checkbox-row input { width: auto; }
-  .checkbox-row label { margin: 0; }
+  .checkbox-row { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+  .checkbox-row label { margin: 0; text-transform: none; letter-spacing: normal; font-size: 12.5px; color: var(--text); font-weight: 400; }
+  #auto-approve-label, #explore-auto-models + label {
+    text-transform: none; letter-spacing: normal; font-weight: 400; color: var(--muted);
+  }
 
-  table { border-collapse: collapse; width: 100%; font-size: 12px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  th { color: var(--dim); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
-  tr:hover td { background: rgba(255,255,255,0.02); }
-  .empty { color: var(--dim); padding: 30px 0; text-align: center; font-size: 12px; }
+  /* ---- custom checkbox (replaces native OS widget everywhere) ---- */
+  input[type=checkbox] {
+    appearance: none; -webkit-appearance: none; width: auto;
+    width: 17px; height: 17px; flex-shrink: 0; margin: 0;
+    border: 1.5px solid var(--border-bright); border-radius: 5px;
+    background: var(--bg-panel); cursor: pointer; position: relative;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  input[type=checkbox]:hover { border-color: var(--accent); }
+  input[type=checkbox]:checked {
+    background: var(--accent); border-color: var(--accent);
+    box-shadow: var(--glow);
+  }
+  input[type=checkbox]:checked::after {
+    content: ''; position: absolute; left: 5px; top: 1px;
+    width: 4px; height: 9px; border: solid var(--accent-contrast);
+    border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  input[type=checkbox]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--dim); font-weight: 700; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.05em; }
+  tr:hover td { background: var(--overlay-1); }
+  .empty { color: var(--dim); padding: 30px 0; text-align: center; font-size: 12.5px; }
   .pill {
-    display: inline-block; border: 1px solid var(--border-bright); padding: 1px 7px;
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+    display: inline-block; border-radius: 20px; padding: 2px 10px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em;
+    background: var(--overlay-2); color: var(--muted);
   }
-  .pill.ok { border-color: var(--ok); }
-  .pill.bad { border-color: var(--bad); color: var(--bad); }
-  .pill.warn { border-color: var(--warn); color: var(--warn); }
+  .pill.ok { background: var(--accent-soft); color: var(--ok); border: 1px solid var(--accent-soft-border); }
+  .pill.bad { background: rgba(255,107,107,0.16); color: var(--bad); border: 1px solid rgba(255,107,107,0.35); }
+  .pill.warn { background: rgba(255,184,77,0.16); color: var(--warn); border: 1px solid rgba(255,184,77,0.35); }
   .mono-block {
-    background: var(--bg-panel); border: 1px solid var(--border); padding: 12px;
-    white-space: pre-wrap; font-size: 12px; max-height: 340px; overflow-y: auto;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px; white-space: pre-wrap; font-size: 12px; max-height: 340px; overflow-y: auto;
+    font-family: var(--font-mono); box-shadow: var(--shadow-sm);
   }
+  code { font-family: var(--font-mono); font-size: 0.92em; background: var(--overlay-2); padding: 1px 5px; border-radius: 4px; }
   .row-actions { display: flex; gap: 6px; }
-  .card { border: 1px solid var(--border); background: var(--bg-panel); padding: 16px; margin-bottom: 14px; }
-  .card h3 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .card {
+    border: 1px solid var(--border); background: var(--bg-panel); border-radius: var(--radius);
+    padding: 18px; margin-bottom: 14px; box-shadow: var(--shadow-md);
+  }
+  .card h3 { margin: 0 0 12px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); font-weight: 700; }
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .stat-box { border: 1px solid var(--border); padding: 12px 14px; }
-  .stat-box .num { font-size: 22px; font-weight: 700; }
-  .stat-box .lbl { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
-  .warn-banner { border: 1px solid var(--warn); color: var(--warn); padding: 8px 12px; font-size: 11px; margin-bottom: 14px; }
+  .stat-box { border: 1px solid var(--border); background: var(--bg-panel); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow-sm); }
+  .stat-box .num { font-size: 25px; font-weight: 800; color: var(--text-strong); letter-spacing: -0.02em; }
+  .stat-box .lbl { color: var(--dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+  .warn-banner { border: 1px solid rgba(255,184,77,0.35); background: rgba(255,184,77,0.09); color: var(--warn); border-radius: var(--radius); padding: 10px 14px; font-size: 11.5px; margin-bottom: 14px; }
 
   /* ---- chat ---- */
-  #chat-toolbar { display: flex; justify-content: flex-end; padding: 10px 24px 0; flex-shrink: 0; }
-  #chat-log { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
-  .msg { max-width: 78%; padding: 9px 13px; white-space: pre-wrap; word-wrap: break-word; font-size: 12.5px; }
-  .msg.user { align-self: flex-end; background: var(--text); color: var(--bg); }
-  .msg.assistant { align-self: flex-start; background: var(--bg-panel); border: 1px solid var(--border); }
-  .msg.system { align-self: center; color: var(--dim); font-size: 11px; background: none; }
-  .msg.error { align-self: center; color: var(--bad); background: none; border: 1px solid var(--bad); padding: 6px 12px; }
-  .confirm-card { align-self: center; border: 1px solid var(--warn); background: var(--bg-panel); padding: 12px 16px; }
-  .confirm-card .tool-call { font-size: 11px; color: var(--warn); margin-bottom: 8px; }
+  #chat-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 14px; padding: 13px 26px 0; flex-shrink: 0; }
+  #chat-log { flex: 1; overflow-y: auto; padding: 24px 26px; display: flex; flex-direction: column; gap: 13px; }
+  .msg { max-width: 72%; padding: 11px 15px; white-space: pre-wrap; word-wrap: break-word; font-size: 13px; border-radius: var(--radius); }
+  .msg.user {
+    align-self: flex-end; color: var(--text-strong); border-radius: 12px 12px 3px 12px;
+    background: var(--accent-soft); border: 1px solid var(--accent-soft-border);
+  }
+  .msg.assistant { align-self: flex-start; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 3px 12px 12px 12px; box-shadow: var(--shadow-sm); }
+  .msg.system { align-self: center; color: var(--dim); font-size: 11px; background: var(--overlay-1); padding: 4px 12px; border-radius: 20px; max-width: none; font-family: var(--font-mono); }
+  .msg.error { align-self: center; color: var(--bad); background: rgba(255,107,107,0.09); border: 1px solid rgba(255,107,107,0.32); padding: 7px 13px; border-radius: var(--radius); }
+  .msg-failed { opacity: 0.55; border-color: var(--bad) !important; box-shadow: inset 0 0 0 1px rgba(255,107,107,0.35); }
+  .confirm-card { align-self: center; border: 1px solid rgba(255,184,77,0.4); background: var(--bg-panel); border-radius: var(--radius); padding: 13px 17px; box-shadow: var(--shadow-md); }
+  .confirm-card .tool-call { font-size: 11px; color: var(--warn); margin-bottom: 8px; font-family: var(--font-mono); }
   .confirm-card .btns { display: flex; gap: 8px; }
-  #chat-input-row { display: flex; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border); flex-shrink: 0; }
-  #chat-input { flex: 1; resize: none; }
+  #chat-input-row { display: flex; flex-direction: column; gap: 8px; padding: 14px 26px 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  #chat-input-pill {
+    display: flex; align-items: flex-end; gap: 10px;
+    border: 1px solid var(--border); border-radius: 18px; background: var(--bg-panel);
+    padding: 10px 10px 10px 16px;
+  }
+  #chat-input-pill:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  #chat-input { flex: 1; resize: none; border: none !important; background: transparent !important; padding: 4px 0 !important; box-shadow: none !important; }
+  #chat-input:focus { box-shadow: none !important; }
+  #chat-input-pill #chat-send { border-radius: 13px; flex-shrink: 0; }
+  #chat-input-toolbar { display: flex; align-items: center; gap: 8px; padding-left: 4px; }
+  .model-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 9px;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--bg-raised);
+    font-size: 11.5px; color: var(--muted); cursor: pointer;
+  }
+  .model-chip:hover { border-color: var(--border-bright); color: var(--text); }
+  .model-chip-icon { font-size: 11px; line-height: 1; }
+  .model-chip-disabled { opacity: 0.45; cursor: not-allowed; }
+  .model-chip-disabled:hover { border-color: var(--border); color: var(--muted); }
+  .model-chip-disabled select { cursor: not-allowed; }
+  .model-chip select {
+    appearance: none; -webkit-appearance: none; border: none !important; background: transparent !important;
+    padding: 0 !important; margin: 0; font-size: 11.5px; color: inherit; cursor: pointer; box-shadow: none !important;
+    max-width: 220px; color-scheme: dark;
+  }
+  :root[data-theme="light"] .model-chip select { color-scheme: light; }
+  .model-chip select option, .model-chip select optgroup {
+    background-color: var(--bg-panel); color: var(--text);
+  }
+  #chat-attach-btn {
+    flex-shrink: 0; border: none; background: transparent; cursor: pointer;
+    font-size: 16px; line-height: 1; padding: 6px 4px 4px; color: var(--muted); border-radius: 8px;
+  }
+  #chat-attach-btn:hover { background: var(--overlay-1); color: var(--text); }
+  #chat-pending-attachments { display: flex; gap: 8px; flex-wrap: wrap; }
+  #chat-pending-attachments:empty { display: none; }
+  .pending-image-thumb { position: relative; width: 52px; height: 52px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); flex-shrink: 0; }
+  .pending-image-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pending-image-thumb button {
+    position: absolute; top: -5px; right: -5px; width: 17px; height: 17px; border-radius: 50%;
+    border: none; background: var(--bad); color: #fff; font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
+  }
+  .pending-file-chip {
+    display: inline-flex; align-items: center; gap: 6px; max-width: 200px; padding: 5px 8px 5px 10px;
+    border-radius: 8px; border: 1px solid var(--border); background: var(--bg-raised); font-size: 11.5px; color: var(--text);
+  }
+  .pending-file-chip .pending-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pending-file-chip button {
+    flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%; border: none;
+    background: var(--bad); color: #fff; font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
+  }
+  .msg-images { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .msg-image-thumb { max-width: 240px; max-height: 240px; border-radius: 8px; display: block; }
+  .msg-files { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+  .msg-file-chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--overlay-1); font-size: 11.5px; color: var(--muted);
+  }
+
+  /* ---- multi-model picker (Explore's live model checklist) ---- */
+  #explore-models-picker { position: relative; }
+  #explore-models-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  #explore-models-chips:empty { display: none; }
+  .model-chip-tag {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px 4px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--bg-raised); font-size: 11.5px; color: var(--text);
+    font-family: var(--font-mono);
+  }
+  .model-chip-tag button {
+    flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%; border: none;
+    background: var(--bad); color: #fff; font-size: 11px; line-height: 1; cursor: pointer; padding: 0;
+  }
+  .model-multiselect-dropdown {
+    position: absolute; z-index: 20; top: 100%; left: 0; margin-top: 6px; width: 360px; max-height: 320px;
+    overflow-y: auto; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow-md); padding: 8px;
+  }
+  .model-multiselect-empty { color: var(--dim); font-size: 12px; padding: 8px; }
+  .model-multiselect-group + .model-multiselect-group { margin-top: 10px; }
+  .model-multiselect-group-label {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim);
+    padding: 2px 6px 4px;
+  }
+  .model-multiselect-item {
+    display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px;
+    font-size: 12px; font-family: var(--font-mono); cursor: pointer;
+  }
+  .model-multiselect-item:hover { background: var(--overlay-1); }
 
   /* ---- log stream (run/explore) ---- */
   #task-log { flex: 1; }
@@ -147,85 +344,122 @@
 <body>
 <aside id="sidebar">
   <div id="brand">
-    <div class="name">mazu</div>
-    <div class="sub">web control</div>
+    <div class="brand-left">
+      <div class="logo">M</div>
+      <div>
+        <div class="name">mazu<span class="cursor">_</span></div>
+        <div class="sub" data-i18n="sidebar_sub">web control</div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px;">
+      <button id="lang-toggle" title="Switch language / 切换语言 / Dili dəyiş"></button>
+      <button id="theme-toggle" title="Toggle light/dark theme"></button>
+    </div>
   </div>
   <nav id="nav">
-    <button data-tab="chat" class="active"><span class="glyph">&gt;_</span>Chat</button>
-    <button data-tab="history"><span class="glyph">&#8635;</span>History</button>
-    <button data-tab="run"><span class="glyph">&#9654;</span>Run</button>
-    <button data-tab="explore"><span class="glyph">&#8942;</span>Explore</button>
-    <button data-tab="council"><span class="glyph">&#9737;</span>Council</button>
+    <button data-tab="chat" class="active"><span class="glyph">&gt;_</span><span data-i18n="nav_chat">Chat</span></button>
+    <button data-tab="history"><span class="glyph">&#8635;</span><span data-i18n="nav_history">History</span></button>
+    <button data-tab="run"><span class="glyph">&#9654;</span><span data-i18n="nav_run">Run</span></button>
+    <button data-tab="explore"><span class="glyph">&#8942;</span><span data-i18n="nav_explore">Explore</span></button>
+    <button data-tab="council"><span class="glyph">&#9737;</span><span data-i18n="nav_council">Council</span></button>
     <div class="divider"></div>
-    <button data-tab="checkpoints"><span class="glyph">&#9673;</span>Checkpoints</button>
-    <button data-tab="memory"><span class="glyph">&#9635;</span>Memory</button>
-    <button data-tab="skills"><span class="glyph">&#9733;</span>Skills</button>
-    <button data-tab="curator"><span class="glyph">&#9851;</span>Curator</button>
+    <button data-tab="checkpoints"><span class="glyph">&#9673;</span><span data-i18n="nav_checkpoints">Checkpoints</span></button>
+    <button data-tab="memory"><span class="glyph">&#9635;</span><span data-i18n="nav_memory">Memory</span></button>
+    <button data-tab="skills"><span class="glyph">&#9733;</span><span data-i18n="nav_skills">Skills</span></button>
+    <button data-tab="curator"><span class="glyph">&#9851;</span><span data-i18n="nav_curator">Curator</span></button>
     <div class="divider"></div>
-    <button data-tab="runs"><span class="glyph">&#8801;</span>Runs</button>
-    <button data-tab="router"><span class="glyph">&#8776;</span>Router</button>
-    <button data-tab="usage"><span class="glyph">&#164;</span>Usage</button>
-    <button data-tab="log"><span class="glyph">&#9776;</span>Log</button>
+    <button data-tab="runs"><span class="glyph">&#8801;</span><span data-i18n="nav_runs">Runs</span></button>
+    <button data-tab="router"><span class="glyph">&#8776;</span><span data-i18n="nav_router">Router</span></button>
+    <button data-tab="usage"><span class="glyph">&#164;</span><span data-i18n="nav_usage">Usage</span></button>
+    <button data-tab="log"><span class="glyph">&#9776;</span><span data-i18n="nav_log">Log</span></button>
     <div class="divider"></div>
-    <button data-tab="models"><span class="glyph">&#9662;</span>Models</button>
-    <button data-tab="doctor"><span class="glyph">&#10003;</span>Doctor</button>
-    <button data-tab="config"><span class="glyph">&#9881;</span>Config</button>
+    <button data-tab="models"><span class="glyph">&#9662;</span><span data-i18n="nav_models">Models</span></button>
+    <button data-tab="doctor"><span class="glyph">&#10003;</span><span data-i18n="nav_doctor">Doctor</span></button>
+    <button data-tab="config"><span class="glyph">&#9881;</span><span data-i18n="nav_config">Config</span></button>
   </nav>
   <div id="status-strip">
-    <div class="row"><span><span id="busy-dot"></span>agent</span><span id="busy-text">idle</span></div>
-    <div class="row"><span>model</span><span id="model-badge">-</span></div>
+    <div class="row"><span><span id="busy-dot"></span><span data-i18n="status_agent">agent</span></span><span id="busy-text">idle</span></div>
+    <div class="row"><span data-i18n="status_model">model</span><span id="model-badge">-</span></div>
     <div class="row" title="Current project folder -- change it from the Config tab">
-      <span>project</span><span id="root-badge">-</span>
+      <span data-i18n="status_project">project</span><span id="root-badge">-</span>
     </div>
   </div>
 </aside>
 
 <main>
   <div id="init-banner" class="warn-banner" style="display:none; margin:16px 24px 0; justify-content:space-between; align-items:center;">
-    <span>This directory isn't a Mazu project yet.</span>
-    <button class="btn small" id="init-banner-btn">Initialize now</button>
+    <span data-i18n="init_banner_text">This directory isn't a Mazu project yet.</span>
+    <button class="btn small" id="init-banner-btn" data-i18n="init_banner_btn">Initialize now</button>
   </div>
 
   <!-- CHAT -->
   <section id="tab-chat" class="tab active">
-    <div id="chat-toolbar"><button class="btn ghost small" id="chat-new-btn">+ New chat</button></div>
+    <div id="chat-toolbar">
+      <button class="btn ghost small" id="chat-new-btn" data-i18n="chat_new">+ New chat</button>
+      <label id="auto-approve-label" style="font-size:12px; display:flex; align-items:center; gap:6px; cursor:pointer;" title="Run shell commands and file/skill deletions without asking for confirmation each turn.">
+        <input type="checkbox" id="auto-approve-toggle"> <span data-i18n="chat_auto_approve">Auto-approve</span>
+      </label>
+    </div>
     <div id="chat-log"></div>
     <div id="chat-input-row">
-      <textarea id="chat-input" rows="2" placeholder="Describe a task..."></textarea>
-      <button class="btn" id="chat-send">Send</button>
+      <div id="chat-vision-warning" class="warn-banner" style="display:none; margin-bottom:8px;"></div>
+      <div id="chat-pending-attachments"></div>
+      <div id="chat-input-pill">
+        <button type="button" id="chat-attach-btn" data-i18n-title="chat_attach_title" title="Attach image or document" aria-label="Attach image or document">&#128444;&#65039;</button>
+        <input type="file" id="chat-file-input" accept="image/png,image/jpeg,image/gif,image/webp,.docx,.pdf,.xlsx,.pptx,.txt,.md,.csv,.json,.py,.js,.ts,.tsx,.jsx,.java,.go,.rb,.rs,.c,.cpp,.h,.yaml,.yml,.toml,.log,.xml,.html,.css,.sh" multiple style="display:none;">
+        <textarea id="chat-input" rows="2" placeholder="Describe a task..." data-i18n-placeholder="chat_placeholder"></textarea>
+        <button class="btn" id="chat-send" data-i18n="chat_send">Send</button>
+      </div>
+      <div id="chat-input-toolbar">
+        <label class="model-chip" data-i18n-title="chat_model_select_title" title="Active model for new messages -- shared with the Config page's default_model.">
+          <span class="model-chip-icon" aria-hidden="true">&#9881;</span>
+          <select id="chat-model-select"></select>
+        </label>
+        <label class="model-chip" data-i18n-title="chat_effort_select_title" title="Reasoning effort -- supported by Anthropic, OpenAI reasoning models, and Gemini. DeepSeek and local models ignore this.">
+          <span class="model-chip-icon" aria-hidden="true">&#129504;</span>
+          <select id="chat-effort-select">
+            <option value="" data-i18n="chat_effort_default">default</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+          </select>
+        </label>
+      </div>
     </div>
   </section>
 
   <!-- RUN -->
   <section id="tab-run" class="tab">
-    <div class="tab-header"><h1>Run</h1><span class="hint">One-shot autonomous task (mazu run)</span></div>
+    <div class="tab-header"><h1 data-i18n="run_title">Run</h1><span class="hint" data-i18n="run_hint">One-shot autonomous task (mazu run)</span></div>
     <div class="tab-body" style="display:flex; flex-direction:column; gap:16px; height:100%;">
       <div class="card">
-        <div class="field"><label>Task (leave empty to use Resume below)</label><textarea id="run-task" rows="2" placeholder="Fix the bug in parser.py"></textarea></div>
+        <div class="field"><label data-i18n="run_task_label">Task (leave empty to use Resume below)</label><textarea id="run-task" rows="2" placeholder="Fix the bug in parser.py" data-i18n-placeholder="run_task_placeholder"></textarea></div>
         <div class="field-row">
-          <div class="field"><label>Max steps</label><input type="number" id="run-max-steps" value="15"></div>
-          <div class="field"><label>Checkpoint every N steps</label><input type="number" id="run-checkpoint-every" value="1"></div>
-          <div class="field"><label>Max cost (USD, optional)</label><input type="number" id="run-max-cost" step="0.01" placeholder="unset"></div>
-          <div class="field"><label>Model (optional)</label><input type="text" id="run-model" placeholder="auto"></div>
+          <div class="field"><label data-i18n="run_max_steps">Max steps</label><input type="number" id="run-max-steps" value="15"></div>
+          <div class="field"><label data-i18n="run_checkpoint_every">Checkpoint every N steps</label><input type="number" id="run-checkpoint-every" value="1"></div>
+          <div class="field"><label data-i18n="run_max_cost">Max cost (USD, optional)</label><input type="number" id="run-max-cost" step="0.01" placeholder="unset" data-i18n-placeholder="run_unset"></div>
+          <div class="field"><label data-i18n="run_model_label">Model (optional)</label><input type="text" id="run-model" placeholder="auto" data-i18n-placeholder="run_auto"></div>
         </div>
+        <div id="run-cost-warning" class="warn-banner" style="display:none;"></div>
         <div class="field-row">
-          <div class="field"><label>Keep last N checkpoints (optional)</label><input type="number" id="run-keep-checkpoints" placeholder="default: 50"></div>
-          <div class="field"><label>Shell allowlist (optional, comma-separated)</label><input type="text" id="run-shell-allowlist" placeholder="git,npm,pytest"></div>
+          <div class="field"><label data-i18n="run_keep_checkpoints">Keep last N checkpoints (optional)</label><input type="number" id="run-keep-checkpoints" placeholder="default: 50" data-i18n-placeholder="run_default_50"></div>
+          <div class="field"><label data-i18n="run_shell_allowlist">Shell allowlist (optional, comma-separated)</label><input type="text" id="run-shell-allowlist" placeholder="git,npm,pytest"></div>
         </div>
-        <div class="checkbox-row"><input type="checkbox" id="run-allow-shell"><label for="run-allow-shell">Allow shell (skip confirmation)</label></div>
-        <div class="checkbox-row"><input type="checkbox" id="run-dry-run"><label for="run-dry-run">Dry run (plan only, no writes/checkpoints)</label></div>
-        <button class="btn" id="run-start">Start Run</button>
+        <div class="checkbox-row"><input type="checkbox" id="run-allow-shell"><label for="run-allow-shell" data-i18n="run_allow_shell">Allow shell (skip confirmation)</label></div>
+        <div class="checkbox-row"><input type="checkbox" id="run-dry-run"><label for="run-dry-run" data-i18n="run_dry_run">Dry run (plan only, no writes/checkpoints)</label></div>
+        <div class="checkbox-row"><input type="checkbox" id="run-auto-commit-baseline"><label for="run-auto-commit-baseline" title="If the working tree has uncommitted changes, commit them as a plain git commit before starting instead of refusing to run." data-i18n="run_auto_commit_baseline" data-i18n-title="run_auto_commit_baseline_title">Auto-commit baseline if working tree is dirty</label></div>
+        <button class="btn" id="run-start" data-i18n="run_start">Start Run</button>
 
-        <h3 style="margin-top:18px;">Resume an earlier run</h3>
-        <div class="field"><label>Run id</label><input type="text" id="run-resume-id" placeholder="reuses that run's original task/model/options"></div>
-        <button class="btn ghost small" id="run-resume-start">Resume</button>
+        <h3 style="margin-top:18px;" data-i18n="run_resume_h3">Resume an earlier run</h3>
+        <div class="field"><label data-i18n="run_id_label">Run id</label><input type="text" id="run-resume-id" placeholder="reuses that run's original task/model/options" data-i18n-placeholder="run_resume_placeholder"></div>
+        <button class="btn ghost small" id="run-resume-start" data-i18n="run_resume">Resume</button>
 
-        <h3 style="margin-top:18px;">Fork from a checkpoint (new branch)</h3>
+        <h3 style="margin-top:18px;" data-i18n="run_fork_h3">Fork from a checkpoint (new branch)</h3>
         <div class="field-row">
-          <div class="field"><label>Checkpoint id</label><input type="text" id="run-fork-checkpoint" placeholder="cp_000003"></div>
-          <div class="field"><label>New branch name</label><input type="text" id="run-fork-branch" placeholder="my-experiment"></div>
+          <div class="field"><label data-i18n="run_checkpoint_id">Checkpoint id</label><input type="text" id="run-fork-checkpoint" placeholder="cp_000003"></div>
+          <div class="field"><label data-i18n="run_new_branch">New branch name</label><input type="text" id="run-fork-branch" placeholder="my-experiment"></div>
         </div>
-        <button class="btn ghost small" id="run-fork-start">Fork &amp; Run (uses Task above)</button>
+        <button class="btn ghost small" id="run-fork-start" data-i18n="run_fork">Fork &amp; Run (uses Task above)</button>
       </div>
       <div id="run-log" class="mono-block" style="flex:1;"></div>
     </div>
@@ -233,23 +467,35 @@
 
   <!-- EXPLORE -->
   <section id="tab-explore" class="tab">
-    <div class="tab-header"><h1>Explore</h1><span class="hint">Parallel branches, ranked comparison (mazu explore)</span></div>
+    <div class="tab-header"><h1 data-i18n="explore_title">Explore</h1><span class="hint" data-i18n="explore_hint">Parallel branches, ranked comparison (mazu explore)</span></div>
     <div class="tab-body" style="display:flex; flex-direction:column; gap:16px; height:100%;">
-      <div class="warn-banner">Runs N full autonomous agents in parallel with shell forced on. Expect roughly Nx the cost of a single run.</div>
+      <div class="warn-banner" data-i18n="explore_banner">Runs N full autonomous agents in parallel with shell forced on. Expect roughly Nx the cost of a single run.</div>
       <div class="card">
-        <div class="field"><label>Task</label><textarea id="explore-task" rows="2" placeholder="Fix the intermittent test failure"></textarea></div>
-        <div class="field"><label>Models (comma-separated -- ignored if Auto-models is checked)</label><input type="text" id="explore-models" placeholder="anthropic:claude-sonnet-5,deepseek:deepseek-chat"></div>
+        <div class="field"><label data-i18n="explore_task_label">Task</label><textarea id="explore-task" rows="2" placeholder="Fix the intermittent test failure" data-i18n-placeholder="explore_task_placeholder"></textarea></div>
+        <div class="field">
+          <label data-i18n="explore_models_label">Models (ignored if Auto-models is checked)</label>
+          <div id="explore-models-picker">
+            <div id="explore-models-chips"></div>
+            <button type="button" class="btn ghost small" id="explore-models-add-btn" data-i18n="explore_add_model">+ Add model</button>
+            <div id="explore-models-dropdown" class="model-multiselect-dropdown" style="display:none;"></div>
+          </div>
+        </div>
         <div class="checkbox-row">
-          <input type="checkbox" id="explore-auto-models"><label for="explore-auto-models">Auto-models (pick from this project's router history)</label>
+          <input type="checkbox" id="explore-auto-models"><label for="explore-auto-models" data-i18n="explore_auto_models">Auto-models (pick from this project's router history)</label>
           <input type="number" id="explore-approaches" value="2" style="width:70px; margin-left:12px;" title="approaches, used only with auto-models">
         </div>
         <div class="field-row">
-          <div class="field"><label>Test command (optional)</label><input type="text" id="explore-test-command" placeholder="pytest -q"></div>
-          <div class="field"><label>Max cost (USD, shared)</label><input type="number" id="explore-max-cost" step="0.01" placeholder="unset"></div>
-          <div class="field"><label>Max steps / branch</label><input type="number" id="explore-max-steps" value="15"></div>
+          <div class="field">
+            <label data-i18n="explore_test_command">Test command (optional)</label>
+            <input type="text" id="explore-test-command" placeholder="pytest -q">
+            <div id="explore-test-command-suggestion" style="display:none; margin-top:6px; font-size:11.5px; color:var(--dim);"></div>
+          </div>
+          <div class="field"><label data-i18n="explore_max_cost">Max cost (USD, shared)</label><input type="number" id="explore-max-cost" step="0.01" placeholder="unset" data-i18n-placeholder="run_unset"></div>
+          <div class="field"><label data-i18n="explore_max_steps">Max steps / branch</label><input type="number" id="explore-max-steps" value="15"></div>
         </div>
-        <div class="field" style="max-width:320px;"><label>Fork from checkpoint (optional)</label><input type="text" id="explore-from-checkpoint" placeholder="defaults to most recent"></div>
-        <button class="btn" id="explore-start">Start Explore</button>
+        <div class="field" style="max-width:320px;"><label data-i18n="explore_from_checkpoint">Fork from checkpoint (optional)</label><input type="text" id="explore-from-checkpoint" placeholder="defaults to most recent" data-i18n-placeholder="explore_from_checkpoint_placeholder"></div>
+        <div id="explore-cost-warning" class="warn-banner" style="display:none;"></div>
+        <button class="btn" id="explore-start" data-i18n="explore_start">Start Explore</button>
       </div>
       <div id="explore-log" class="mono-block" style="flex:1;"></div>
     </div>
@@ -257,16 +503,17 @@
 
   <!-- COUNCIL -->
   <section id="tab-council" class="tab">
-    <div class="tab-header"><h1>Council</h1><span class="hint">Ask multiple models independently, one lead synthesizes (mazu council)</span></div>
+    <div class="tab-header"><h1 data-i18n="council_title">Council</h1><span class="hint" data-i18n="council_hint">Ask multiple models independently, one lead synthesizes (mazu council)</span></div>
     <div class="tab-body" style="display:flex; flex-direction:column; gap:16px; height:100%;">
       <div class="card">
-        <div class="field"><label>Question</label><textarea id="council-question" rows="2" placeholder="Should we migrate this service to async I/O?"></textarea></div>
+        <div class="field"><label data-i18n="council_question">Question</label><textarea id="council-question" rows="2" placeholder="Should we migrate this service to async I/O?" data-i18n-placeholder="council_question_placeholder"></textarea></div>
         <div class="field-row">
-          <div class="field"><label>Members (comma-separated)</label><input type="text" id="council-models" placeholder="anthropic:claude-sonnet-5,openai:gpt-5"></div>
-          <div class="field"><label>Lead (synthesizes)</label><input type="text" id="council-lead" placeholder="anthropic:claude-opus-4-8"></div>
-          <div class="field"><label>Max cost (USD, optional)</label><input type="number" id="council-max-cost" step="0.01" placeholder="unset"></div>
+          <div class="field"><label data-i18n="council_members">Members (comma-separated)</label><input type="text" id="council-models" placeholder="anthropic:claude-sonnet-5,openai:gpt-5"></div>
+          <div class="field"><label data-i18n="council_lead">Lead (synthesizes)</label><input type="text" id="council-lead" placeholder="anthropic:claude-opus-4-8"></div>
+          <div class="field"><label data-i18n="council_max_cost">Max cost (USD, optional)</label><input type="number" id="council-max-cost" step="0.01" placeholder="unset" data-i18n-placeholder="run_unset"></div>
         </div>
-        <button class="btn" id="council-start">Ask Council</button>
+        <div id="council-cost-warning" class="warn-banner" style="display:none;"></div>
+        <button class="btn" id="council-start" data-i18n="council_start">Ask Council</button>
       </div>
       <div id="council-log" class="mono-block" style="flex:1;"></div>
     </div>
@@ -274,12 +521,12 @@
 
   <!-- CHECKPOINTS -->
   <section id="tab-checkpoints" class="tab">
-    <div class="tab-header"><h1>Checkpoints</h1><span class="hint">Timeline &amp; rollback</span></div>
+    <div class="tab-header"><h1 data-i18n="checkpoints_title">Checkpoints</h1><span class="hint" data-i18n="checkpoints_hint">Timeline &amp; rollback</span></div>
     <div class="tab-body">
       <div class="field-row" style="align-items:flex-end; margin-bottom:16px;">
-        <button class="btn small" id="take-checkpoint-btn" style="margin-bottom:14px;">Take checkpoint now</button>
-        <div class="field" style="max-width:140px;"><label>Keep last N</label><input type="number" id="prune-keep-last" placeholder="e.g. 10"></div>
-        <button class="btn ghost small" id="prune-btn" style="margin-bottom:14px;">Prune older</button>
+        <button class="btn small" id="take-checkpoint-btn" style="margin-bottom:14px;" data-i18n="checkpoints_take">Take checkpoint now</button>
+        <div class="field" style="max-width:140px;"><label data-i18n="checkpoints_keep_last">Keep last N</label><input type="number" id="prune-keep-last" placeholder="e.g. 10" data-i18n-placeholder="checkpoints_keep_last_placeholder"></div>
+        <button class="btn ghost small" id="prune-btn" style="margin-bottom:14px;" data-i18n="checkpoints_prune">Prune older</button>
       </div>
       <div id="checkpoints-body" class="empty">Loading...</div>
     </div>
@@ -287,16 +534,16 @@
 
   <!-- MEMORY -->
   <section id="tab-memory" class="tab">
-    <div class="tab-header"><h1>Memory</h1><span class="hint">Project-scoped agent memory</span></div>
+    <div class="tab-header"><h1 data-i18n="memory_title">Memory</h1><span class="hint" data-i18n="memory_hint">Project-scoped agent memory</span></div>
     <div class="tab-body">
       <div id="memory-stats" class="stat-grid"></div>
       <div class="field-row" style="align-items:flex-end;">
-        <div class="field" style="max-width:320px;"><label>Search</label><input type="text" id="memory-search" placeholder="Search memory..."></div>
-        <div class="field" style="max-width:320px;"><label>Why would QUERY retrieve? (optional)</label><input type="text" id="memory-why-query" placeholder="parser bug"></div>
-        <button class="btn ghost small" id="memory-why-btn" style="margin-bottom:14px;">Explain</button>
-        <button class="btn ghost small" id="memory-consolidate-btn" style="margin-bottom:14px;">Find duplicates</button>
-        <button class="btn ghost small" id="memory-stale-btn" style="margin-bottom:14px;">Find stale</button>
-        <button class="btn ghost small" id="memory-archived-btn" style="margin-bottom:14px;">Show archived</button>
+        <div class="field" style="max-width:320px;"><label data-i18n="memory_search">Search</label><input type="text" id="memory-search" placeholder="Search memory..." data-i18n-placeholder="memory_search_placeholder"></div>
+        <div class="field" style="max-width:320px;"><label data-i18n="memory_why">Why would QUERY retrieve? (optional)</label><input type="text" id="memory-why-query" placeholder="parser bug" data-i18n-placeholder="memory_why_placeholder"></div>
+        <button class="btn ghost small" id="memory-why-btn" style="margin-bottom:14px;" data-i18n="memory_explain">Explain</button>
+        <button class="btn ghost small" id="memory-consolidate-btn" style="margin-bottom:14px;" data-i18n="memory_find_dupes">Find duplicates</button>
+        <button class="btn ghost small" id="memory-stale-btn" style="margin-bottom:14px;" data-i18n="memory_find_stale">Find stale</button>
+        <button class="btn ghost small" id="memory-archived-btn" style="margin-bottom:14px;" data-i18n="memory_show_archived">Show archived</button>
       </div>
       <div id="memory-why-body"></div>
       <div id="memory-consolidate-body"></div>
@@ -308,38 +555,39 @@
 
   <!-- SKILLS -->
   <section id="tab-skills" class="tab">
-    <div class="tab-header"><h1>Skills</h1><span class="hint">Saved reusable solutions</span></div>
+    <div class="tab-header"><h1 data-i18n="skills_title">Skills</h1><span class="hint" data-i18n="skills_hint">Saved reusable solutions</span></div>
     <div class="tab-body"><div id="skills-body" class="empty">Loading...</div></div>
   </section>
 
   <!-- CURATOR -->
   <section id="tab-curator" class="tab">
-    <div class="tab-header"><h1>Curator</h1><span class="hint">Autonomous maintenance, own API key -- opt-in</span></div>
+    <div class="tab-header"><h1 data-i18n="curator_title">Curator</h1><span class="hint" data-i18n="curator_hint">Autonomous maintenance, own API key -- opt-in</span></div>
     <div class="tab-body" style="display:flex; flex-direction:column; gap:16px; height:100%; overflow-y:auto;">
       <div id="curator-status-card" class="card"></div>
 
       <div class="card" id="curator-run-card" style="display:none;">
-        <h3>Run a pass</h3>
+        <h3 data-i18n="curator_run_pass">Run a pass</h3>
         <div class="field-row">
-          <div class="field" style="max-width:340px;"><label>Areas (none checked = all)</label>
-            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="memory" id="curator-area-memory"><label for="curator-area-memory">memory</label></div>
-            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="skills" id="curator-area-skills"><label for="curator-area-skills">skills</label></div>
-            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="housekeeping" id="curator-area-housekeeping"><label for="curator-area-housekeeping">housekeeping</label></div>
-            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="conflicts" id="curator-area-conflicts"><label for="curator-area-conflicts">conflicts</label></div>
+          <div class="field" style="max-width:340px;"><label data-i18n="curator_areas">Areas (none checked = all)</label>
+            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="memory" id="curator-area-memory"><label for="curator-area-memory" data-i18n="curator_area_memory">memory</label></div>
+            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="skills" id="curator-area-skills"><label for="curator-area-skills" data-i18n="curator_area_skills">skills</label></div>
+            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="housekeeping" id="curator-area-housekeeping"><label for="curator-area-housekeeping" data-i18n="curator_area_housekeeping">housekeeping</label></div>
+            <div class="checkbox-row"><input type="checkbox" class="curator-area" value="conflicts" id="curator-area-conflicts"><label for="curator-area-conflicts" data-i18n="curator_area_conflicts">conflicts</label></div>
           </div>
           <div class="field">
-            <label>Max cost (USD, optional)</label><input type="number" id="curator-max-cost" step="0.01" placeholder="unset">
-            <label style="margin-top:10px;">Max rounds / area</label><input type="number" id="curator-max-rounds" value="8">
+            <label data-i18n="curator_max_cost">Max cost (USD, optional)</label><input type="number" id="curator-max-cost" step="0.01" placeholder="unset" data-i18n-placeholder="run_unset">
+            <label style="margin-top:10px;" data-i18n="curator_max_rounds">Max rounds / area</label><input type="number" id="curator-max-rounds" value="8">
           </div>
         </div>
-        <div class="checkbox-row"><input type="checkbox" id="curator-full"><label for="curator-full">Full (ignore watermarks, re-check every area)</label></div>
-        <div class="checkbox-row"><input type="checkbox" id="curator-dry-run"><label for="curator-dry-run">Dry run (preview only, nothing applied)</label></div>
-        <button class="btn" id="curator-run-start">Run Curator</button>
+        <div class="checkbox-row"><input type="checkbox" id="curator-full"><label for="curator-full" data-i18n="curator_full">Full (ignore watermarks, re-check every area)</label></div>
+        <div class="checkbox-row"><input type="checkbox" id="curator-dry-run"><label for="curator-dry-run" data-i18n="curator_dry_run">Dry run (preview only, nothing applied)</label></div>
+        <div id="curator-cost-warning" class="warn-banner" style="display:none;"></div>
+        <button class="btn" id="curator-run-start" data-i18n="curator_run_start">Run Curator</button>
       </div>
       <div id="curator-log" class="mono-block" style="min-height:120px;"></div>
 
       <div class="card" id="curator-diary-card" style="display:none;">
-        <h3>Diary</h3>
+        <h3 data-i18n="curator_diary">Diary</h3>
         <div id="curator-diary-body" class="empty">Loading...</div>
       </div>
     </div>
@@ -347,12 +595,12 @@
 
   <!-- RUNS -->
   <section id="tab-runs" class="tab">
-    <div class="tab-header"><h1>Runs</h1><span class="hint">History of mazu run / explore invocations</span></div>
+    <div class="tab-header"><h1 data-i18n="runs_title">Runs</h1><span class="hint" data-i18n="runs_hint">History of mazu run / explore invocations</span></div>
     <div class="tab-body">
       <div class="field-row" style="align-items:flex-end; margin-bottom:16px;">
-        <div class="field" style="max-width:200px;"><label>Compare: run A id</label><input type="text" id="runs-compare-a"></div>
-        <div class="field" style="max-width:200px;"><label>run B id</label><input type="text" id="runs-compare-b"></div>
-        <button class="btn ghost small" id="runs-compare-btn" style="margin-bottom:14px;">Compare</button>
+        <div class="field" style="max-width:200px;"><label data-i18n="runs_compare_a">Compare: run A id</label><input type="text" id="runs-compare-a"></div>
+        <div class="field" style="max-width:200px;"><label data-i18n="runs_compare_b">run B id</label><input type="text" id="runs-compare-b"></div>
+        <button class="btn ghost small" id="runs-compare-btn" style="margin-bottom:14px;" data-i18n="runs_compare">Compare</button>
       </div>
       <div id="runs-compare-body"></div>
       <div id="runs-body" class="empty">Loading...</div>
@@ -361,7 +609,7 @@
 
   <!-- ROUTER -->
   <section id="tab-router" class="tab">
-    <div class="tab-header"><h1>Router</h1><span class="hint">Model win-rate from explore history</span></div>
+    <div class="tab-header"><h1 data-i18n="router_title">Router</h1><span class="hint" data-i18n="router_hint">Model win-rate from explore history</span></div>
     <div class="tab-body">
       <div class="field" style="max-width:220px;"><select id="router-task-type"><option value="">all task types</option></select></div>
       <div id="router-body" class="empty">Loading...</div>
@@ -370,14 +618,14 @@
 
   <!-- USAGE -->
   <section id="tab-usage" class="tab">
-    <div class="tab-header"><h1>Usage</h1><span class="hint">Estimated API spend</span></div>
+    <div class="tab-header"><h1 data-i18n="usage_title">Usage</h1><span class="hint" data-i18n="usage_hint">Estimated API spend</span></div>
     <div class="tab-body">
       <div class="field" style="max-width:220px;">
         <select id="usage-since">
-          <option value="">all time</option>
-          <option value="1">last 1 day</option>
-          <option value="7">last 7 days</option>
-          <option value="30">last 30 days</option>
+          <option value="" data-i18n="usage_all_time">all time</option>
+          <option value="1" data-i18n="usage_last1">last 1 day</option>
+          <option value="7" data-i18n="usage_last7">last 7 days</option>
+          <option value="30" data-i18n="usage_last30">last 30 days</option>
         </select>
       </div>
       <div id="usage-body" class="empty">Loading...</div>
@@ -386,7 +634,7 @@
 
   <!-- LOG -->
   <section id="tab-log" class="tab">
-    <div class="tab-header"><h1>Action Log</h1><span class="hint">Every tool call, every session</span></div>
+    <div class="tab-header"><h1 data-i18n="log_title">Action Log</h1><span class="hint" data-i18n="log_hint">Every tool call, every session</span></div>
     <div class="tab-body" style="display:flex; gap:20px; height:100%;">
       <div style="flex:1; min-width:0; overflow-y:auto;"><div id="log-sessions-body" class="empty">Loading...</div></div>
       <div style="flex:1; min-width:0; overflow-y:auto;"><div id="log-detail-body" class="empty">Select a session</div></div>
@@ -395,40 +643,41 @@
 
   <!-- MODELS -->
   <section id="tab-models" class="tab">
-    <div class="tab-header"><h1>Models</h1><span class="hint">Streaming, tool use, context window, pricing (best-effort)</span></div>
+    <div class="tab-header"><h1 data-i18n="models_title">Models</h1><span class="hint" data-i18n="models_hint">Streaming, tool use, context window, pricing (best-effort)</span></div>
     <div class="tab-body"><div id="models-body" class="empty">Loading...</div></div>
   </section>
 
   <!-- DOCTOR -->
   <section id="tab-doctor" class="tab">
-    <div class="tab-header"><h1>Doctor</h1><span class="hint">Setup diagnostics</span></div>
+    <div class="tab-header"><h1 data-i18n="doctor_title">Doctor</h1><span class="hint" data-i18n="doctor_hint">Setup diagnostics</span></div>
     <div class="tab-body">
-      <div class="checkbox-row"><input type="checkbox" id="doctor-live"><label for="doctor-live">Also verify keys with a real API call (tiny cost)</label></div>
-      <button class="btn ghost" id="doctor-refresh" style="margin-bottom:16px;">Re-check</button>
+      <div class="checkbox-row"><input type="checkbox" id="doctor-live"><label for="doctor-live" data-i18n="doctor_live">Also verify keys with a real API call (tiny cost)</label></div>
+      <button class="btn ghost" id="doctor-refresh" style="margin-bottom:16px;" data-i18n="doctor_recheck">Re-check</button>
       <div id="doctor-body" class="empty">Loading...</div>
     </div>
   </section>
 
   <!-- CONFIG -->
   <section id="tab-config" class="tab">
-    <div class="tab-header"><h1>Config</h1><span class="hint">~/.mazu/config.toml</span></div>
+    <div class="tab-header"><h1 data-i18n="config_title">Config</h1><span class="hint" data-i18n="config_hint">~/.mazu/config.toml</span></div>
     <div class="tab-body">
       <div class="card" style="max-width:480px; margin-bottom:20px;">
-        <h3>Project folder</h3>
-        <div class="field"><label>Current root</label><input type="text" id="project-root-display" readonly></div>
-        <div class="field"><label>Switch to (type a full path, or Browse)</label>
+        <h3 data-i18n="config_project_folder">Project folder</h3>
+        <div class="field"><label data-i18n="config_current_root">Current root</label><input type="text" id="project-root-display" readonly></div>
+        <div class="field"><label data-i18n="config_switch_to">Switch to (type a full path, or Browse)</label>
           <div style="display:flex; gap:8px;">
             <input type="text" id="project-path-input" placeholder="C:\path\to\project">
-            <button class="btn ghost small" id="project-browse-btn" style="white-space:nowrap;">Browse</button>
+            <button class="btn ghost small" id="project-browse-btn" style="white-space:nowrap;" data-i18n="config_browse">Browse</button>
           </div>
         </div>
         <div id="project-browse-body" style="display:none; margin-bottom:14px;"></div>
-        <button class="btn" id="project-switch-btn">Switch project</button>
+        <button class="btn" id="project-switch-btn" data-i18n="config_switch_project">Switch project</button>
         <div id="project-switch-result" style="margin-top:10px; font-size:12px;"></div>
+        <div id="project-recent" style="margin-top:14px;"></div>
       </div>
       <div class="card" style="max-width:480px; margin-bottom:20px;">
-        <h3>Quick setup</h3>
-        <div class="field"><label>Provider</label>
+        <h3 data-i18n="config_quick_setup">Quick setup</h3>
+        <div class="field"><label data-i18n="config_provider">Provider</label>
           <select id="setup-provider">
             <option value="anthropic">anthropic</option>
             <option value="openai">openai</option>
@@ -436,16 +685,21 @@
             <option value="gemini">gemini</option>
           </select>
         </div>
-        <div class="field"><label>API key</label><input type="password" id="setup-key"></div>
-        <div class="checkbox-row"><input type="checkbox" id="setup-verify" checked><label for="setup-verify">Verify with a real API call</label></div>
-        <div class="checkbox-row"><input type="checkbox" id="setup-default" checked><label for="setup-default">Set as default model</label></div>
-        <button class="btn" id="setup-btn">Save</button>
+        <div class="field"><label data-i18n="config_api_key">API key</label><input type="password" id="setup-key"></div>
+        <div class="checkbox-row"><input type="checkbox" id="setup-verify" checked><label for="setup-verify" data-i18n="config_verify">Verify with a real API call</label></div>
+        <div class="checkbox-row"><input type="checkbox" id="setup-default" checked><label for="setup-default" data-i18n="config_set_default">Set as default model</label></div>
+        <button class="btn" id="setup-btn" data-i18n="config_save">Save</button>
         <div id="setup-result" style="margin-top:10px; font-size:12px;"></div>
+        <div id="setup-model-picker" style="margin-top:10px; font-size:12px; display:none;">
+          <div id="setup-model-picker-label" style="color:var(--dim); margin-bottom:6px;"></div>
+          <select id="setup-model-select"></select>
+          <button class="btn" id="setup-model-use-btn" data-i18n="config_use_as_default" style="margin-left:8px;">Use as default</button>
+        </div>
       </div>
       <div id="config-body" class="empty">Loading...</div>
       <div class="card" style="max-width:480px; margin-top:20px;">
-        <h3>Set a value</h3>
-        <div class="field"><label>Key</label>
+        <h3 data-i18n="config_set_value">Set a value</h3>
+        <div class="field"><label data-i18n="config_key">Key</label>
           <select id="config-key">
             <option value="default_model">default_model</option>
             <option value="router_suggestions">router_suggestions</option>
@@ -463,15 +717,15 @@
             <option value="council_lead">council_lead</option>
           </select>
         </div>
-        <div class="field"><label>Value</label><input type="text" id="config-value"></div>
-        <button class="btn" id="config-set">Set</button>
+        <div class="field"><label data-i18n="config_value">Value</label><input type="text" id="config-value"></div>
+        <button class="btn" id="config-set" data-i18n="config_set">Set</button>
       </div>
     </div>
   </section>
 
   <!-- HISTORY -->
   <section id="tab-history" class="tab">
-    <div class="tab-header"><h1>History</h1><span class="hint">Past chat sessions -- click Resume to continue one</span></div>
+    <div class="tab-header"><h1 data-i18n="history_title">History</h1><span class="hint" data-i18n="history_hint">Past chat sessions -- click Resume to continue one</span></div>
     <div class="tab-body"><div id="history-body" class="empty">Loading...</div></div>
   </section>
 </main>
@@ -482,12 +736,618 @@ const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtCost = (n) => `$${(n || 0).toFixed(4)}`;
 
+// -- theme (dark/light) --------------------------------------------------
+const THEME_STORAGE_KEY = 'mazuTheme';
+const ICON_SUN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>';
+const ICON_MOON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>';
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  const btn = $('#theme-toggle');
+  if (btn) btn.innerHTML = theme === 'light' ? ICON_MOON : ICON_SUN; // shows the icon for the mode a click switches TO
+}
+applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || 'dark');
+$('#theme-toggle').addEventListener('click', () => {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+});
+
+// -- language (en/zh) -----------------------------------------------------
+// Covers every static UI string (sidebar, tab headers, field labels,
+// placeholders, checkbox labels, buttons). Dynamic content rendered from live
+// API data (table rows in Memory/Runs/Usage/etc., alert/confirm dialogs) is
+// NOT translated yet -- deliberately scoped out of this pass to avoid rushing
+// ~30 separate render functions at once; still English regardless of language.
+const LANG_STORAGE_KEY = 'mazuLang';
+const TRANSLATIONS = {
+  en: {
+    sidebar_sub: 'web control',
+    nav_chat: 'Chat', nav_history: 'History', nav_run: 'Run', nav_explore: 'Explore', nav_council: 'Council',
+    nav_checkpoints: 'Checkpoints', nav_memory: 'Memory', nav_skills: 'Skills', nav_curator: 'Curator',
+    nav_runs: 'Runs', nav_router: 'Router', nav_usage: 'Usage', nav_log: 'Log',
+    nav_models: 'Models', nav_doctor: 'Doctor', nav_config: 'Config',
+    status_agent: 'agent', status_model: 'model', status_project: 'project',
+    init_banner_text: "This directory isn't a Mazu project yet.", init_banner_btn: 'Initialize now',
+
+    chat_new: '+ New chat', chat_auto_approve: 'Auto-approve', chat_placeholder: 'Describe a task...', chat_send: 'Send',
+    chat_model_loading: 'Loading models...', chat_model_none: 'No model configured',
+    chat_model_current_suffix: '(current)', chat_model_select_title: "Active model for new messages -- shared with the Config page's default_model.",
+    chat_effort_default: 'default', chat_effort_select_title: 'Reasoning effort -- supported by Anthropic, OpenAI reasoning models, and Gemini. DeepSeek and local models ignore this.',
+    chat_effort_unsupported_title: "{model} doesn't support reasoning effort -- this control has no effect on it.",
+    chat_vision_unsupported_warning: "{model} doesn't appear to support image input -- sending this may fail. Remove the image, or switch models first.",
+    chat_attach_title: 'Attach image or document', chat_remove_attachment: 'Remove',
+    chat_image_unsupported_type: 'Unsupported image type: {type} (use PNG, JPEG, GIF, or WebP)',
+    chat_send_failed: 'Message failed to send.',
+
+    run_title: 'Run', run_hint: 'One-shot autonomous task (mazu run)',
+    run_task_label: 'Task (leave empty to use Resume below)', run_task_placeholder: 'Fix the bug in parser.py',
+    run_max_steps: 'Max steps', run_checkpoint_every: 'Checkpoint every N steps',
+    run_max_cost: 'Max cost (USD, optional)', run_unset: 'unset', run_model_label: 'Model (optional)', run_auto: 'auto',
+    cost_untracked_warning: "Max cost won't be enforced -- no pricing data for: {models}. The run will proceed with no spend limit.",
+    run_keep_checkpoints: 'Keep last N checkpoints (optional)', run_default_50: 'default: 50',
+    run_shell_allowlist: 'Shell allowlist (optional, comma-separated)',
+    run_allow_shell: 'Allow shell (skip confirmation)', run_dry_run: 'Dry run (plan only, no writes/checkpoints)',
+    run_auto_commit_baseline: 'Auto-commit baseline if working tree is dirty',
+    run_auto_commit_baseline_title: 'If the working tree has uncommitted changes, commit them as a plain git commit before starting instead of refusing to run.',
+    run_start: 'Start Run', run_resume_h3: 'Resume an earlier run', run_id_label: 'Run id',
+    run_resume_placeholder: "reuses that run's original task/model/options", run_resume: 'Resume',
+    run_fork_h3: 'Fork from a checkpoint (new branch)', run_checkpoint_id: 'Checkpoint id',
+    run_new_branch: 'New branch name', run_fork: 'Fork & Run (uses Task above)',
+
+    explore_title: 'Explore', explore_hint: 'Parallel branches, ranked comparison (mazu explore)',
+    explore_banner: 'Runs N full autonomous agents in parallel with shell forced on. Expect roughly Nx the cost of a single run.',
+    explore_task_label: 'Task', explore_task_placeholder: 'Fix the intermittent test failure',
+    explore_models_label: 'Models (ignored if Auto-models is checked)', explore_add_model: '+ Add model',
+    explore_detected_command: 'Detected: {command}', explore_use_suggestion: 'Use it',
+    explore_auto_models: "Auto-models (pick from this project's router history)",
+    explore_test_command: 'Test command (optional)', explore_max_cost: 'Max cost (USD, shared)',
+    explore_max_steps: 'Max steps / branch', explore_from_checkpoint: 'Fork from checkpoint (optional)',
+    explore_from_checkpoint_placeholder: 'defaults to most recent', explore_start: 'Start Explore',
+
+    council_title: 'Council', council_hint: 'Ask multiple models independently, one lead synthesizes (mazu council)',
+    council_question: 'Question', council_question_placeholder: 'Should we migrate this service to async I/O?',
+    council_members: 'Members (comma-separated)', council_lead: 'Lead (synthesizes)',
+    council_max_cost: 'Max cost (USD, optional)', council_start: 'Ask Council',
+
+    checkpoints_title: 'Checkpoints', checkpoints_hint: 'Timeline & rollback',
+    checkpoints_take: 'Take checkpoint now', checkpoints_keep_last: 'Keep last N',
+    checkpoints_keep_last_placeholder: 'e.g. 10', checkpoints_prune: 'Prune older', loading: 'Loading...',
+
+    memory_title: 'Memory', memory_hint: 'Project-scoped agent memory', memory_search: 'Search',
+    memory_search_placeholder: 'Search memory...', memory_why: 'Why would QUERY retrieve? (optional)',
+    memory_why_placeholder: 'parser bug', memory_explain: 'Explain', memory_find_dupes: 'Find duplicates',
+    memory_find_stale: 'Find stale', memory_show_archived: 'Show archived',
+
+    skills_title: 'Skills', skills_hint: 'Saved reusable solutions',
+
+    curator_title: 'Curator', curator_hint: 'Autonomous maintenance, own API key -- opt-in',
+    curator_run_pass: 'Run a pass', curator_areas: 'Areas (none checked = all)',
+    curator_area_memory: 'memory', curator_area_skills: 'skills', curator_area_housekeeping: 'housekeeping', curator_area_conflicts: 'conflicts',
+    curator_max_cost: 'Max cost (USD, optional)', curator_max_rounds: 'Max rounds / area',
+    curator_full: 'Full (ignore watermarks, re-check every area)', curator_dry_run: 'Dry run (preview only, nothing applied)',
+    curator_run_start: 'Run Curator', curator_diary: 'Diary',
+
+    runs_title: 'Runs', runs_hint: 'History of mazu run / explore invocations',
+    runs_compare_a: 'Compare: run A id', runs_compare_b: 'run B id', runs_compare: 'Compare',
+
+    router_title: 'Router', router_hint: 'Model win-rate from explore history',
+
+    usage_title: 'Usage', usage_hint: 'Estimated API spend',
+    usage_all_time: 'all time', usage_last1: 'last 1 day', usage_last7: 'last 7 days', usage_last30: 'last 30 days',
+
+    log_title: 'Action Log', log_hint: 'Every tool call, every session', log_select: 'Select a session',
+
+    models_title: 'Models', models_hint: 'Streaming, tool use, context window, pricing (best-effort)',
+
+    doctor_title: 'Doctor', doctor_hint: 'Setup diagnostics',
+    doctor_live: 'Also verify keys with a real API call (tiny cost)', doctor_recheck: 'Re-check',
+
+    config_title: 'Config', config_hint: '~/.mazu/config.toml',
+    config_project_folder: 'Project folder', config_current_root: 'Current root',
+    config_switch_to: 'Switch to (type a full path, or Browse)', config_browse: 'Browse',
+    config_switch_project: 'Switch project', config_quick_setup: 'Quick setup', config_provider: 'Provider',
+    config_api_key: 'API key', config_verify: 'Verify with a real API call', config_set_default: 'Set as default model',
+    config_save: 'Save', config_set_value: 'Set a value', config_key: 'Key', config_value: 'Value', config_set: 'Set',
+
+    history_title: 'History', history_hint: 'Past chat sessions -- click Resume to continue one',
+
+    // -- dynamic (JS-rendered) content: table headers, buttons, dialogs --
+    checking: 'Checking...', yes_word: 'yes', no_word: 'no',
+    btn_diff: 'Diff', btn_inspect: 'Inspect', btn_compare_with: 'Compare with...', btn_branch_from: 'Branch from',
+    btn_rollback: 'Rollback', btn_edit: 'Edit', btn_forget: 'Forget', btn_unarchive: 'Unarchive',
+    btn_undo: 'Undo', btn_unset: 'Unset', btn_resume: 'Resume', btn_delete: 'Delete',
+    btn_run_it: 'Run it', btn_decline: 'Decline', btn_apply_merge: 'Apply merge', btn_archive_these: 'Archive these',
+
+    cp_none_yet: 'No checkpoints yet.', cp_loading_diff: 'Loading diff...', cp_no_changes: '(no changes)',
+    cp_loading_comparison: 'Loading comparison...',
+    cp_prompt_compare: 'Compare with which checkpoint id?',
+    cp_prompt_branch_name: 'New branch name, pointing at {id} (your current branch/working tree is untouched):',
+    cp_branch_created: "Created branch '{branch}' at {id}. Switch with: git checkout {branch}",
+    cp_confirm_rollback: 'Rollback to {id}? This discards code, memory, skills, and conversation state since then.',
+    cp_confirm_rollback_no_skills_snapshot: "This checkpoint has no skills snapshot -- your CURRENT skills will be deleted, not restored to an earlier version.",
+    cp_restored: 'Restored to {id}.', cp_failed_create: 'Failed to create checkpoint.',
+    cp_enter_keep_count: 'Enter how many recent checkpoints to keep.',
+    cp_confirm_prune: 'Delete on-disk snapshot data for every checkpoint older than the last {n}?',
+    cp_pruned: 'Pruned {n} checkpoint(s).',
+
+    mem_stat_active: 'Active', mem_stat_pinned: 'Pinned', mem_stat_superseded: 'Superseded',
+    mem_stat_archived: 'Archived', mem_stat_total: 'Total ever',
+    mem_none_yet: 'No memories saved yet.', mem_th_category: 'Category', mem_th_title: 'Title', mem_th_body: 'Body',
+    mem_pin: 'Pin', mem_unpin: 'Unpin',
+    mem_prompt_new_title: 'New title:', mem_prompt_new_body: 'New body:',
+    mem_confirm_forget: 'Forget memory "{title}"? This cannot be undone.',
+    mem_why_none: 'No memories stored yet.', mem_no_dupes: 'No near-duplicate memories found.',
+    mem_dupes_found: '{n} duplicate group(s) found',
+    mem_confirm_merge: 'Merge these duplicate groups? Superseded entries stay in the database but stop showing in context.',
+    mem_no_stale: 'No memories stale for 30+ days.',
+    mem_stale_found_one: '{n} memory stale (30+ days, no recent retrieval)',
+    mem_stale_found_many: '{n} memories stale (30+ days, no recent retrieval)',
+    mem_confirm_archive: 'Archive these stale memories? This is reversible -- archived entries stay in the database and can be restored from the list below.',
+    mem_no_archived: 'No archived memories.',
+    mem_archived_found_one: '{n} archived memory', mem_archived_found_many: '{n} archived memories',
+
+    skills_none_yet: 'No skills saved yet.', skills_th_name: 'Name', skills_th_description: 'Description',
+    skills_th_tags: 'Tags', skills_th_uses: 'Uses', skills_confirm_forget: 'Forget skill "{name}"?',
+
+    curator_not_configured: 'Not configured',
+    curator_not_configured_desc: "Curator is fully opt-in and uses its OWN, separate API key -- never your main model's. Set {key1} and {key2} (e.g. {example}) on the Config tab to get started.",
+    curator_never: 'never curated', curator_enabled_word: 'Enabled', curator_disabled_word: 'Disabled',
+    curator_disable_btn: 'Disable', curator_enable_btn: 'Enable',
+    curator_no_decisions: 'No decisions logged yet.', curator_dry_run_suffix: ' (dry-run)',
+    curator_could_not_undo: 'Could not undo.', curator_no_auto_undo: 'No automatic undo. Try:\n{hint}',
+    curator_did_not_run: 'Curator did not run: {reason}',
+
+    runs_none_yet: 'No runs recorded yet.', runs_th_id: 'ID', runs_th_model: 'Model', runs_th_status: 'Status',
+    runs_th_stop: 'Stop', runs_th_steps: 'Steps', runs_th_checkpoints: 'Checkpoints', runs_th_started: 'Started',
+    runs_label_a: 'Run A', runs_label_b: 'Run B', runs_branch: 'Branch', runs_status: 'Status',
+    runs_stop_reason: 'Stop reason', runs_steps: 'Steps', runs_checkpoints: 'Checkpoints',
+    runs_memories_saved: 'Memories saved', runs_estimated_cost: 'Estimated cost',
+    runs_default_branch: '(default)', runs_unknown: 'unknown',
+
+    router_all_task_types: 'all task types', router_none_yet: 'No explore history recorded yet.',
+    router_th_model: 'Model', router_th_wins: 'Wins', router_th_win_rate: 'Win rate',
+    router_th_tests_passed: 'Tests passed', router_th_avg_cost: 'Avg cost',
+
+    usage_stat_total_cost: 'Total cost', usage_stat_total_calls: 'Total calls',
+    usage_unpriced_warning: "Some calls used a model with no pricing entry -- their cost is not included above.",
+    usage_none_yet: 'No usage recorded yet.', usage_th_provider: 'Provider', usage_th_model: 'Model',
+    usage_th_calls: 'Calls', usage_th_input_tok: 'Input tok', usage_th_output_tok: 'Output tok', usage_th_cost: 'Cost',
+
+    log_none_yet: 'No sessions logged yet.', log_no_actions: 'No actions.',
+    log_actions_word: 'actions', log_errors_word: 'errors',
+
+    models_none: 'No model info available.', models_th_model: 'Model', models_th_stream: 'Stream',
+    models_th_tools: 'Tools', models_th_context: 'Context', models_th_price_in: '$/1M in', models_th_price_out: '$/1M out',
+    models_note: "Best-effort and may go stale -- verify against your provider's own docs before relying on it for capacity planning.",
+
+    config_th_key: 'Key', config_th_value: 'Value', config_confirm_unset: 'Unset "{key}"?',
+    config_none_set: 'No config set.', config_enter_key_first: 'Enter an API key first.', config_saving: 'Saving...',
+    config_saved_to: 'Saved to {path}.', config_verify_result: ' Verify: [{status}] {message}',
+    config_default_set: ' Default model set to {model}.',
+    config_fetching_models: 'Fetching available models...', config_model_fetch_failed: "Couldn't fetch live models: {error}",
+    config_pick_model_label: 'Pick a specific model for {provider} (fetched live from your account):',
+    config_use_as_default: 'Use as default', config_model_set_to: 'Default model set to {model}.',
+
+    proj_enter_path: 'Enter a path first.', proj_browse_error: 'Could not browse that path.',
+    proj_up: '.. (up)', proj_no_subfolders: 'No subfolders', proj_recent_label: 'Recent projects',
+    proj_switched: 'Switched to {root}',
+    proj_not_initialized_suffix: ' -- not a Mazu project yet, see the banner above.',
+    proj_chat_still_old_suffix: " -- your open chat is still using the previous folder; start a new chat to work in this one.",
+    proj_chat_system_note: '[project] Switched to {root}, but this chat is still working in its original folder. Start a new chat to use the new one.',
+    proj_switch_failed: 'Failed to switch.',
+
+    history_none_yet: 'No chat sessions yet.', history_th_title: 'Title', history_th_updated: 'Updated',
+    history_th_messages: 'Messages', history_no_title: '(no title)',
+    history_confirm_delete: 'Delete this chat session permanently? This cannot be undone.',
+
+    run_alert_enter_task: 'Enter a task, or use Resume / Fork below.',
+    run_alert_fork_required: 'Task, checkpoint id, and branch name are all required to fork.',
+    explore_alert_enter_models: 'Add at least one model, or check Auto-models.',
+  },
+  az: {
+    sidebar_sub: 'veb idarəetmə',
+    nav_chat: 'Söhbət', nav_history: 'Tarixçə', nav_run: 'İşə sal', nav_explore: 'Araşdır', nav_council: 'Şura',
+    nav_checkpoints: 'Nəzarət nöqtələri', nav_memory: 'Yaddaş', nav_skills: 'Bacarıqlar', nav_curator: 'Kurator',
+    nav_runs: 'İcralar', nav_router: 'Router', nav_usage: 'İstifadə', nav_log: 'Jurnal',
+    nav_models: 'Modellər', nav_doctor: 'Diaqnostika', nav_config: 'Tənzimləmələr',
+    status_agent: 'agent', status_model: 'model', status_project: 'layihə',
+    init_banner_text: 'Bu qovluq hələ Mazu layihəsi deyil.', init_banner_btn: 'İndi başlat',
+
+    chat_new: '+ Yeni söhbət', chat_auto_approve: 'Avtomatik təsdiq', chat_placeholder: 'Tapşırığı təsvir edin...', chat_send: 'Göndər',
+
+    run_title: 'İşə sal', run_hint: 'Bir dəfəlik avtonom tapşırıq (mazu run)',
+    run_task_label: 'Tapşırıq (boş buraxın ki, aşağıdakı Davam etdən istifadə edilsin)', run_task_placeholder: 'parser.py-dəki xətanı düzəlt',
+    run_max_steps: 'Maksimum addım', run_checkpoint_every: 'Hər N addımda nəzarət nöqtəsi',
+    run_max_cost: 'Maksimum xərc (USD, istəyə bağlı)', run_unset: 'təyin edilməyib', run_model_label: 'Model (istəyə bağlı)', run_auto: 'avtomatik',
+    run_keep_checkpoints: 'Son N nəzarət nöqtəsini saxla (istəyə bağlı)', run_default_50: 'default: 50',
+    run_shell_allowlist: 'Shell icazə siyahısı (istəyə bağlı, vergüllə ayrılmış)',
+    run_allow_shell: 'Shell-ə icazə ver (təsdiqi keç)', run_dry_run: 'Sınaq rejimi (yalnız plan, yazma/nəzarət nöqtəsi yoxdur)',
+    run_auto_commit_baseline: 'İş qovluğu "kirli"dirsə, əsası avtomatik commit et',
+    run_auto_commit_baseline_title: 'Əgər iş qovluğunda commit edilməmiş dəyişikliklər varsa, işə başlamazdan əvvəl onları adi bir git commit kimi göndər, işi rədd etmək əvəzinə.',
+    run_start: 'İşi başlat', run_resume_h3: 'Əvvəlki icranı davam etdir', run_id_label: 'İcra ID',
+    run_resume_placeholder: 'həmin icranın orijinal tapşırığını/modelini/seçimlərini yenidən istifadə edir', run_resume: 'Davam et',
+    run_fork_h3: 'Nəzarət nöqtəsindən çıxart (yeni budaq)', run_checkpoint_id: 'Nəzarət nöqtəsi ID',
+    run_new_branch: 'Yeni budaq adı', run_fork: 'Çıxart və işə sal (yuxarıdakı Tapşırığı istifadə edir)',
+
+    explore_title: 'Araşdır', explore_hint: 'Paralel budaqlar, sıralanmış müqayisə (mazu explore)',
+    explore_banner: 'N tam avtonom agenti paralel işə salır, shell məcburi aktivdir. Təxminən tək icranın N qatı qədər xərc gözlənilir.',
+    explore_task_label: 'Tapşırıq', explore_task_placeholder: 'Aralıq test uğursuzluğunu düzəlt',
+    explore_models_label: 'Modellər (vergüllə ayrılmış -- Avtomatik-modellər işarələnibsə nəzərə alınmır)',
+    explore_auto_models: 'Avtomatik-modellər (bu layihənin router tarixçəsindən seçir)',
+    explore_test_command: 'Test əmri (istəyə bağlı)', explore_max_cost: 'Maksimum xərc (USD, paylaşılan)',
+    explore_max_steps: 'Maksimum addım / budaq', explore_from_checkpoint: 'Nəzarət nöqtəsindən çıxart (istəyə bağlı)',
+    explore_from_checkpoint_placeholder: 'default olaraq ən sonuncu', explore_start: 'Araşdırmanı başlat',
+
+    council_title: 'Şura', council_hint: 'Bir neçə modeldən müstəqil soruş, bir lider ümumiləşdirir (mazu council)',
+    council_question: 'Sual', council_question_placeholder: 'Bu xidməti async I/O-ya köçürməliyikmi?',
+    council_members: 'Üzvlər (vergüllə ayrılmış)', council_lead: 'Lider (ümumiləşdirir)',
+    council_max_cost: 'Maksimum xərc (USD, istəyə bağlı)', council_start: 'Şuraya sual ver',
+
+    checkpoints_title: 'Nəzarət nöqtələri', checkpoints_hint: 'Zaman xətti və geri qaytarma',
+    checkpoints_take: 'İndi nəzarət nöqtəsi yarat', checkpoints_keep_last: 'Son N-i saxla',
+    checkpoints_keep_last_placeholder: 'məs. 10', checkpoints_prune: 'Köhnələri təmizlə', loading: 'Yüklənir...',
+
+    memory_title: 'Yaddaş', memory_hint: 'Layihəyə aid agent yaddaşı', memory_search: 'Axtar',
+    memory_search_placeholder: 'Yaddaşda axtar...', memory_why: 'Niyə SORĞU bunu tapardı? (istəyə bağlı)',
+    memory_why_placeholder: 'parser xətası', memory_explain: 'İzah et', memory_find_dupes: 'Təkrarları tap',
+    memory_find_stale: 'Köhnəlmişləri tap', memory_show_archived: 'Arxivlənmişləri göstər',
+
+    skills_title: 'Bacarıqlar', skills_hint: 'Saxlanılmış təkrar istifadə edilə bilən həllər',
+
+    curator_title: 'Kurator', curator_hint: 'Avtonom baxım, öz API açarı ilə -- istəyə bağlı',
+    curator_run_pass: 'Bir dövr işlət', curator_areas: 'Sahələr (heç biri işarələnməyibsə = hamısı)',
+    curator_area_memory: 'yaddaş', curator_area_skills: 'bacarıqlar', curator_area_housekeeping: 'gündəlik baxım', curator_area_conflicts: 'ziddiyyətlər',
+    curator_max_cost: 'Maksimum xərc (USD, istəyə bağlı)', curator_max_rounds: 'Sahə başına maksimum dövr',
+    curator_full: 'Tam rejim (su nişanlarını nəzərə alma, hər sahəni yenidən yoxla)', curator_dry_run: 'Sınaq rejimi (yalnız önizləmə, heç nə tətbiq edilmir)',
+    curator_run_start: 'Kuratoru işə sal', curator_diary: 'Gündəlik',
+
+    runs_title: 'İcralar', runs_hint: 'mazu run / explore çağırışlarının tarixçəsi',
+    runs_compare_a: 'Müqayisə et: A icrasının ID-si', runs_compare_b: 'B icrasının ID-si', runs_compare: 'Müqayisə et',
+
+    router_title: 'Router', router_hint: 'Araşdırma tarixçəsindən model qalibiyyət nisbəti',
+
+    usage_title: 'İstifadə', usage_hint: 'Təxmini API xərci',
+    usage_all_time: 'bütün zamanlar', usage_last1: 'son 1 gün', usage_last7: 'son 7 gün', usage_last30: 'son 30 gün',
+
+    log_title: 'Əməliyyat jurnalı', log_hint: 'Hər alət çağırışı, hər sessiya', log_select: 'Bir sessiya seçin',
+
+    models_title: 'Modellər', models_hint: 'Axın (streaming), alət istifadəsi, kontekst pəncərəsi, qiymət (təxmini)',
+
+    doctor_title: 'Diaqnostika', doctor_hint: 'Quraşdırma diaqnostikası',
+    doctor_live: 'Açarları real API çağırışı ilə də yoxla (cüzi xərc)', doctor_recheck: 'Yenidən yoxla',
+
+    config_title: 'Tənzimləmələr', config_hint: '~/.mazu/config.toml',
+    config_project_folder: 'Layihə qovluğu', config_current_root: 'Hazırkı kök qovluq',
+    config_switch_to: 'Bura keç (tam yol yazın, ya da Gözdən keçirin)', config_browse: 'Gözdən keçir',
+    config_switch_project: 'Layihəni dəyiş', config_quick_setup: 'Sürətli qurulum', config_provider: 'Provayder',
+    config_api_key: 'API açarı', config_verify: 'Real API çağırışı ilə yoxla', config_set_default: 'Default model kimi təyin et',
+    config_save: 'Saxla', config_set_value: 'Dəyər təyin et', config_key: 'Açar', config_value: 'Dəyər', config_set: 'Təyin et',
+
+    history_title: 'Tarixçə', history_hint: 'Keçmiş söhbət sessiyaları -- davam etmək üçün Davam et düyməsinə basın',
+
+    checking: 'Yoxlanılır...', yes_word: 'bəli', no_word: 'xeyr',
+    btn_diff: 'Fərq', btn_inspect: 'İncələ', btn_compare_with: 'Bununla müqayisə et...', btn_branch_from: 'Buradan budaqlandır',
+    btn_rollback: 'Geri qaytar', btn_edit: 'Redaktə et', btn_forget: 'Sil', btn_unarchive: 'Arxivdən çıxart',
+    btn_undo: 'Ləğv et', btn_unset: 'Sıfırla', btn_resume: 'Davam et', btn_delete: 'Sil',
+    btn_run_it: 'İşə sal', btn_decline: 'İmtina et', btn_apply_merge: 'Birləşdirməni tətbiq et', btn_archive_these: 'Bunları arxivlə',
+
+    cp_none_yet: 'Hələ heç bir nəzarət nöqtəsi yoxdur.', cp_loading_diff: 'Fərq yüklənir...', cp_no_changes: '(dəyişiklik yoxdur)',
+    cp_loading_comparison: 'Müqayisə yüklənir...',
+    cp_prompt_compare: 'Hansı nəzarət nöqtəsi ID-si ilə müqayisə edilsin?',
+    cp_prompt_branch_name: 'Yeni budaq adı, {id}-ə işarə edir (hazırkı budağınız/iş qovluğunuz toxunulmaz qalır):',
+    cp_branch_created: '{id}-də "{branch}" budağı yaradıldı. Keçmək üçün: git checkout {branch}',
+    cp_confirm_rollback: '{id}-ə geri qayıdılsın? Bu, o vaxtdan bəri kod, yaddaş və söhbət vəziyyətini ləğv edəcək.',
+    cp_restored: '{id}-ə bərpa edildi.', cp_failed_create: 'Nəzarət nöqtəsi yaradıla bilmədi.',
+    cp_enter_keep_count: 'Neçə son nəzarət nöqtəsinin saxlanacağını yazın.',
+    cp_confirm_prune: 'Son {n}-dən köhnə olan bütün nəzarət nöqtələrinin disk üzərindəki snapshot datası silinsin?',
+    cp_pruned: '{n} nəzarət nöqtəsi təmizləndi.',
+
+    mem_stat_active: 'Aktiv', mem_stat_pinned: 'Bərkidilmiş', mem_stat_superseded: 'Əvəzlənmiş',
+    mem_stat_archived: 'Arxivlənmiş', mem_stat_total: 'Ümumi (bütün zamanlar)',
+    mem_none_yet: 'Hələ saxlanılmış yaddaş yoxdur.', mem_th_category: 'Kateqoriya', mem_th_title: 'Başlıq', mem_th_body: 'Məzmun',
+    mem_pin: 'Bərkit', mem_unpin: 'Bərkitməni ləğv et',
+    mem_prompt_new_title: 'Yeni başlıq:', mem_prompt_new_body: 'Yeni məzmun:',
+    mem_confirm_forget: '"{title}" yaddaşı silinsin? Bu, geri qaytarıla bilməz.',
+    mem_why_none: 'Hələ heç bir yaddaş saxlanılmayıb.', mem_no_dupes: 'Yaxın-təkrar yaddaş tapılmadı.',
+    mem_dupes_found: '{n} təkrar qrup tapıldı',
+    mem_confirm_merge: 'Bu təkrar qruplar birləşdirilsin? Əvəzlənmiş qeydlər bazada qalır, amma kontekstdə görünmür.',
+    mem_no_stale: '30+ gün köhnəlmiş yaddaş yoxdur.',
+    mem_stale_found_one: '{n} yaddaş köhnəlmişdir (30+ gün, son vaxtlar götürülməyib)',
+    mem_stale_found_many: '{n} yaddaş köhnəlmişdir (30+ gün, son vaxtlar götürülməyib)',
+    mem_confirm_archive: 'Bu köhnəlmiş yaddaşlar arxivlənsin? Bu geri qaytarıla bilər -- arxivlənmiş qeydlər bazada qalır, aşağıdakı siyahıdan bərpa edilə bilər.',
+    mem_no_archived: 'Arxivlənmiş yaddaş yoxdur.',
+    mem_archived_found_one: '{n} arxivlənmiş yaddaş', mem_archived_found_many: '{n} arxivlənmiş yaddaş',
+
+    skills_none_yet: 'Hələ saxlanılmış bacarıq yoxdur.', skills_th_name: 'Ad', skills_th_description: 'Təsvir',
+    skills_th_tags: 'Teqlər', skills_th_uses: 'İstifadə sayı', skills_confirm_forget: '"{name}" bacarığı silinsin?',
+
+    curator_not_configured: 'Tənzimlənməyib',
+    curator_not_configured_desc: 'Kurator tamamilə istəyə bağlıdır və ÖZ, ayrıca API açarından istifadə edir -- heç vaxt sizin əsas modelinizin açarından deyil. Başlamaq üçün Config tab-ında {key1} və {key2} təyin edin (məs. {example}).',
+    curator_never: 'heç vaxt baxılmayıb', curator_enabled_word: 'Aktiv', curator_disabled_word: 'Deaktiv',
+    curator_disable_btn: 'Deaktiv et', curator_enable_btn: 'Aktiv et',
+    curator_no_decisions: 'Hələ heç bir qərar qeydə alınmayıb.', curator_dry_run_suffix: ' (sınaq rejimi)',
+    curator_could_not_undo: 'Ləğv edilə bilmədi.', curator_no_auto_undo: 'Avtomatik ləğv mümkün deyil. Bunu sınayın:\n{hint}',
+    curator_did_not_run: 'Kurator işə düşmədi: {reason}',
+
+    runs_none_yet: 'Hələ heç bir icra qeydə alınmayıb.', runs_th_id: 'ID', runs_th_model: 'Model', runs_th_status: 'Status',
+    runs_th_stop: 'Dayanma', runs_th_steps: 'Addımlar', runs_th_checkpoints: 'Nəzarət nöqtələri', runs_th_started: 'Başlama',
+    runs_label_a: 'İcra A', runs_label_b: 'İcra B', runs_branch: 'Budaq', runs_status: 'Status',
+    runs_stop_reason: 'Dayanma səbəbi', runs_steps: 'Addımlar', runs_checkpoints: 'Nəzarət nöqtələri',
+    runs_memories_saved: 'Saxlanılan yaddaşlar', runs_estimated_cost: 'Təxmini xərc',
+    runs_default_branch: '(default)', runs_unknown: 'naməlum',
+
+    router_all_task_types: 'bütün tapşırıq növləri', router_none_yet: 'Hələ araşdırma tarixçəsi qeydə alınmayıb.',
+    router_th_model: 'Model', router_th_wins: 'Qalibiyyət', router_th_win_rate: 'Qalibiyyət nisbəti',
+    router_th_tests_passed: 'Keçən testlər', router_th_avg_cost: 'Orta xərc',
+
+    usage_stat_total_cost: 'Ümumi xərc', usage_stat_total_calls: 'Ümumi çağırış',
+    usage_unpriced_warning: 'Bəzi çağırışlar qiymət məlumatı olmayan model istifadə edib -- onların xərci yuxarıya daxil edilməyib.',
+    usage_none_yet: 'Hələ istifadə qeydə alınmayıb.', usage_th_provider: 'Provayder', usage_th_model: 'Model',
+    usage_th_calls: 'Çağırışlar', usage_th_input_tok: 'Giriş token', usage_th_output_tok: 'Çıxış token', usage_th_cost: 'Xərc',
+
+    log_none_yet: 'Hələ qeydə alınmış sessiya yoxdur.', log_no_actions: 'Əməliyyat yoxdur.',
+    log_actions_word: 'əməliyyat', log_errors_word: 'xəta',
+
+    models_none: 'Model məlumatı əlçatan deyil.', models_th_model: 'Model', models_th_stream: 'Axın',
+    models_th_tools: 'Alətlər', models_th_context: 'Kontekst', models_th_price_in: '$/1M giriş', models_th_price_out: '$/1M çıxış',
+    models_note: 'Təxmini məlumatdır və köhnələ bilər -- tutum planlaması üçün istifadə etməzdən əvvəl öz provayderinizin sənədləri ilə yoxlayın.',
+
+    config_th_key: 'Açar', config_th_value: 'Dəyər', config_confirm_unset: '"{key}" sıfırlansın?',
+    config_none_set: 'Heç bir tənzimləmə təyin edilməyib.', config_enter_key_first: 'Əvvəlcə bir API açarı yazın.', config_saving: 'Saxlanılır...',
+    config_saved_to: '{path}-a saxlanıldı.', config_verify_result: ' Yoxlama: [{status}] {message}',
+    config_default_set: ' Default model {model} olaraq təyin edildi.',
+
+    proj_enter_path: 'Əvvəlcə bir yol yazın.', proj_browse_error: 'O yol gözdən keçirilə bilmədi.',
+    proj_up: '.. (yuxarı)', proj_no_subfolders: 'Alt qovluq yoxdur', proj_recent_label: 'Son istifadə olunan layihələr',
+    proj_switched: '{root}-a keçildi',
+    proj_not_initialized_suffix: ' -- bu hələ Mazu layihəsi deyil, yuxarıdakı bannerə baxın.',
+    proj_chat_still_old_suffix: ' -- açıq olan söhbətiniz hələ əvvəlki qovluqda işləyir; bu qovluqda işləmək üçün yeni söhbət başladın.',
+    proj_chat_system_note: '[layihə] {root}-a keçildi, amma bu söhbət hələ öz orijinal qovluğunda işləyir. Yenisini istifadə etmək üçün yeni söhbət başladın.',
+    proj_switch_failed: 'Keçid uğursuz oldu.',
+
+    history_none_yet: 'Hələ söhbət sessiyası yoxdur.', history_th_title: 'Başlıq', history_th_updated: 'Yenilənmə',
+    history_th_messages: 'Mesajlar', history_no_title: '(başlıqsız)',
+    history_confirm_delete: 'Bu söhbət sessiyası həmişəlik silinsin? Bu geri qaytarıla bilməz.',
+
+    run_alert_enter_task: 'Bir tapşırıq yazın, ya da aşağıdakı Davam et / Çıxart-dan istifadə edin.',
+    run_alert_fork_required: 'Çıxartmaq üçün tapşırıq, nəzarət nöqtəsi ID-si və budaq adı tələb olunur.',
+    explore_alert_enter_models: 'Modelləri yazın, ya da Avtomatik-modelləri işarələyin.',
+  },
+  zh: {
+    sidebar_sub: '网页控制台',
+    nav_chat: '对话', nav_history: '历史记录', nav_run: '运行', nav_explore: '探索', nav_council: '会诊',
+    nav_checkpoints: '检查点', nav_memory: '记忆', nav_skills: '技能', nav_curator: '管理员',
+    nav_runs: '运行记录', nav_router: '路由', nav_usage: '用量', nav_log: '日志',
+    nav_models: '模型', nav_doctor: '诊断', nav_config: '配置',
+    status_agent: '代理', status_model: '模型', status_project: '项目',
+    init_banner_text: '此目录还不是 Mazu 项目。', init_banner_btn: '立即初始化',
+
+    chat_new: '+ 新对话', chat_auto_approve: '自动批准', chat_placeholder: '描述一个任务...', chat_send: '发送',
+    chat_model_loading: '正在加载模型...', chat_model_none: '尚未配置模型',
+    chat_model_current_suffix: '（当前）', chat_model_select_title: '新消息使用的模型 -- 与 Config 页面的 default_model 共用同一份配置。',
+    chat_effort_default: '默认', chat_effort_select_title: '推理强度 -- 仅 Anthropic、OpenAI 推理模型和 Gemini 支持。DeepSeek 和本地模型会忽略此设置。',
+    chat_effort_unsupported_title: '{model} 不支持推理强度设置 -- 对该模型无效。',
+    chat_vision_unsupported_warning: '{model} 似乎不支持图片输入 -- 发送可能会失败。请移除图片，或先切换模型。',
+    chat_attach_title: '添加图片或文件', chat_remove_attachment: '移除',
+    chat_image_unsupported_type: '不支持的图片类型：{type}（请使用 PNG、JPEG、GIF 或 WebP）',
+    chat_send_failed: '消息发送失败。',
+
+    run_title: '运行', run_hint: '一次性自主任务 (mazu run)',
+    run_task_label: '任务（留空则使用下方的继续运行）', run_task_placeholder: '修复 parser.py 中的错误',
+    run_max_steps: '最大步数', run_checkpoint_every: '每 N 步创建检查点',
+    run_max_cost: '最高花费（美元，可选）', run_unset: '未设置', run_model_label: '模型（可选）', run_auto: '自动',
+    cost_untracked_warning: '最高花费限制不会生效 -- 以下模型没有价格数据：{models}。本次运行将不受花费上限约束。',
+    run_keep_checkpoints: '保留最近 N 个检查点（可选）', run_default_50: '默认：50',
+    run_shell_allowlist: 'Shell 白名单（可选，逗号分隔）',
+    run_allow_shell: '允许运行 Shell 命令（跳过确认）', run_dry_run: '演练模式（仅计划，不写入/不创建检查点）',
+    run_auto_commit_baseline: '若工作区有未提交更改，自动提交基线',
+    run_auto_commit_baseline_title: '如果工作区有未提交的更改，将在开始前把它们作为一次普通的 git 提交提交上去，而不是拒绝运行。',
+    run_start: '开始运行', run_resume_h3: '继续一次早前的运行', run_id_label: '运行 ID',
+    run_resume_placeholder: '将复用该次运行原来的任务/模型/选项', run_resume: '继续',
+    run_fork_h3: '从某个检查点分叉（新分支）', run_checkpoint_id: '检查点 ID',
+    run_new_branch: '新分支名称', run_fork: '分叉并运行（使用上方的任务）',
+
+    explore_title: '探索', explore_hint: '并行分支，排名比较 (mazu explore)',
+    explore_banner: '将并行运行 N 个完整的自主代理，并强制开启 Shell。预计花费约为单次运行的 N 倍。',
+    explore_task_label: '任务', explore_task_placeholder: '修复间歇性的测试失败',
+    explore_models_label: '模型（勾选自动选模型时将被忽略）', explore_add_model: '+ 添加模型',
+    explore_detected_command: '检测到：{command}', explore_use_suggestion: '使用',
+    explore_auto_models: '自动选模型（从该项目的路由历史中挑选）',
+    explore_test_command: '测试命令（可选）', explore_max_cost: '最高花费（美元，共享）',
+    explore_max_steps: '每个分支的最大步数', explore_from_checkpoint: '从检查点分叉（可选）',
+    explore_from_checkpoint_placeholder: '默认使用最近一次', explore_start: '开始探索',
+
+    council_title: '会诊', council_hint: '让多个模型独立作答，由一位主持模型综合归纳 (mazu council)',
+    council_question: '问题', council_question_placeholder: '我们应该把这个服务迁移到异步 I/O 吗？',
+    council_members: '成员模型（逗号分隔）', council_lead: '主持模型（负责综合归纳）',
+    council_max_cost: '最高花费（美元，可选）', council_start: '发起会诊',
+
+    checkpoints_title: '检查点', checkpoints_hint: '时间线与回滚',
+    checkpoints_take: '立即创建检查点', checkpoints_keep_last: '保留最近 N 个',
+    checkpoints_keep_last_placeholder: '例如 10', checkpoints_prune: '清理更早的', loading: '加载中...',
+
+    memory_title: '记忆', memory_hint: '项目范围内的代理记忆', memory_search: '搜索',
+    memory_search_placeholder: '搜索记忆...', memory_why: '为什么某个查询会检索到它？（可选）',
+    memory_why_placeholder: '解析器错误', memory_explain: '解释', memory_find_dupes: '查找重复项',
+    memory_find_stale: '查找过时项', memory_show_archived: '显示已归档项',
+
+    skills_title: '技能', skills_hint: '已保存的可复用解决方案',
+
+    curator_title: '管理员', curator_hint: '自主维护，使用独立的 API 密钥 -- 可选启用',
+    curator_run_pass: '执行一轮', curator_areas: '范围（不勾选 = 全部）',
+    curator_area_memory: '记忆', curator_area_skills: '技能', curator_area_housekeeping: '日常维护', curator_area_conflicts: '冲突',
+    curator_max_cost: '最高花费（美元，可选）', curator_max_rounds: '每个范围的最大轮数',
+    curator_full: '完整模式（忽略水位线，重新检查每个范围）', curator_dry_run: '演练模式（仅预览，不应用任何更改）',
+    curator_run_start: '运行管理员', curator_diary: '日志',
+
+    runs_title: '运行记录', runs_hint: 'mazu run / explore 的调用历史',
+    runs_compare_a: '比较：运行 A 的 ID', runs_compare_b: '运行 B 的 ID', runs_compare: '比较',
+
+    router_title: '路由', router_hint: '来自探索历史的模型胜率',
+
+    usage_title: '用量', usage_hint: '预估 API 花费',
+    usage_all_time: '全部时间', usage_last1: '最近 1 天', usage_last7: '最近 7 天', usage_last30: '最近 30 天',
+
+    log_title: '操作日志', log_hint: '每一次工具调用，每一个会话', log_select: '请选择一个会话',
+
+    models_title: '模型', models_hint: '流式输出、工具调用、上下文窗口、定价（尽力而为）',
+
+    doctor_title: '诊断', doctor_hint: '安装配置诊断',
+    doctor_live: '同时用一次真实的 API 调用来验证密钥（花费很小）', doctor_recheck: '重新检查',
+
+    config_title: '配置', config_hint: '~/.mazu/config.toml',
+    config_project_folder: '项目文件夹', config_current_root: '当前根目录',
+    config_switch_to: '切换到（输入完整路径，或点击浏览）', config_browse: '浏览',
+    config_switch_project: '切换项目', config_quick_setup: '快速设置', config_provider: '服务商',
+    config_api_key: 'API 密钥', config_verify: '用一次真实的 API 调用来验证', config_set_default: '设为默认模型',
+    config_save: '保存', config_set_value: '设置一个值', config_key: '键', config_value: '值', config_set: '设置',
+
+    history_title: '历史记录', history_hint: '过去的对话会话 -- 点击"继续"以接着聊',
+
+    checking: '正在检查...', yes_word: '是', no_word: '否',
+    btn_diff: '差异', btn_inspect: '查看详情', btn_compare_with: '与...比较', btn_branch_from: '从此分叉',
+    btn_rollback: '回滚', btn_edit: '编辑', btn_forget: '删除', btn_unarchive: '取消归档',
+    btn_undo: '撤销', btn_unset: '取消设置', btn_resume: '继续', btn_delete: '删除',
+    btn_run_it: '执行', btn_decline: '拒绝', btn_apply_merge: '应用合并', btn_archive_these: '归档这些',
+
+    cp_none_yet: '还没有检查点。', cp_loading_diff: '正在加载差异...', cp_no_changes: '（无更改）',
+    cp_loading_comparison: '正在加载比较结果...',
+    cp_prompt_compare: '要与哪个检查点 ID 比较？',
+    cp_prompt_branch_name: '新分支名称，指向 {id}（你当前的分支/工作区不受影响）：',
+    cp_branch_created: '已在 {id} 处创建分支“{branch}”。可用以下命令切换：git checkout {branch}',
+    cp_confirm_rollback: '回滚到 {id}？这将丢弃自那时起的代码、记忆、技能和对话状态。',
+    cp_confirm_rollback_no_skills_snapshot: '该检查点没有技能快照 -- 你当前的技能将被删除，而不是恢复到早期版本。',
+    cp_restored: '已恢复到 {id}。', cp_failed_create: '创建检查点失败。',
+    cp_enter_keep_count: '请输入要保留最近多少个检查点。',
+    cp_confirm_prune: '删除最近 {n} 个之前的所有检查点的磁盘快照数据？',
+    cp_pruned: '已清理 {n} 个检查点。',
+
+    mem_stat_active: '活跃', mem_stat_pinned: '已置顶', mem_stat_superseded: '已被替代',
+    mem_stat_archived: '已归档', mem_stat_total: '历史总数',
+    mem_none_yet: '还没有保存的记忆。', mem_th_category: '类别', mem_th_title: '标题', mem_th_body: '内容',
+    mem_pin: '置顶', mem_unpin: '取消置顶',
+    mem_prompt_new_title: '新标题：', mem_prompt_new_body: '新内容：',
+    mem_confirm_forget: '删除记忆"{title}"？此操作无法撤销。',
+    mem_why_none: '还没有存储任何记忆。', mem_no_dupes: '未发现近似重复的记忆。',
+    mem_dupes_found: '发现 {n} 组重复项',
+    mem_confirm_merge: '合并这些重复分组？被替代的条目仍保留在数据库中，但不再出现在上下文里。',
+    mem_no_stale: '没有超过 30 天未使用的过时记忆。',
+    mem_stale_found_one: '{n} 条记忆已过时（超过 30 天未被检索）',
+    mem_stale_found_many: '{n} 条记忆已过时（超过 30 天未被检索）',
+    mem_confirm_archive: '归档这些过时的记忆？此操作可撤销 -- 已归档的条目仍保留在数据库中，可从下方列表恢复。',
+    mem_no_archived: '没有已归档的记忆。',
+    mem_archived_found_one: '{n} 条已归档记忆', mem_archived_found_many: '{n} 条已归档记忆',
+
+    skills_none_yet: '还没有保存的技能。', skills_th_name: '名称', skills_th_description: '描述',
+    skills_th_tags: '标签', skills_th_uses: '使用次数', skills_confirm_forget: '删除技能"{name}"？',
+
+    curator_not_configured: '尚未配置',
+    curator_not_configured_desc: '管理员功能完全可选启用，并使用它自己独立的 API 密钥 -- 绝不会用你的主模型密钥。请在配置标签页设置 {key1} 和 {key2}（例如 {example}）以开始使用。',
+    curator_never: '从未整理过', curator_enabled_word: '已启用', curator_disabled_word: '已禁用',
+    curator_disable_btn: '禁用', curator_enable_btn: '启用',
+    curator_no_decisions: '还没有记录任何决策。', curator_dry_run_suffix: '（演练模式）',
+    curator_could_not_undo: '无法撤销。', curator_no_auto_undo: '无法自动撤销。请尝试：\n{hint}',
+    curator_did_not_run: '管理员未运行：{reason}',
+
+    runs_none_yet: '还没有运行记录。', runs_th_id: 'ID', runs_th_model: '模型', runs_th_status: '状态',
+    runs_th_stop: '停止原因', runs_th_steps: '步数', runs_th_checkpoints: '检查点', runs_th_started: '开始时间',
+    runs_label_a: '运行 A', runs_label_b: '运行 B', runs_branch: '分支', runs_status: '状态',
+    runs_stop_reason: '停止原因', runs_steps: '步数', runs_checkpoints: '检查点',
+    runs_memories_saved: '已保存的记忆', runs_estimated_cost: '预估花费',
+    runs_default_branch: '（默认）', runs_unknown: '未知',
+
+    router_all_task_types: '所有任务类型', router_none_yet: '还没有探索历史记录。',
+    router_th_model: '模型', router_th_wins: '获胜次数', router_th_win_rate: '胜率',
+    router_th_tests_passed: '测试通过', router_th_avg_cost: '平均花费',
+
+    usage_stat_total_cost: '总花费', usage_stat_total_calls: '总调用次数',
+    usage_unpriced_warning: '部分调用使用了没有定价信息的模型 -- 其花费未计入以上统计。',
+    usage_none_yet: '还没有用量记录。', usage_th_provider: '服务商', usage_th_model: '模型',
+    usage_th_calls: '调用次数', usage_th_input_tok: '输入 token', usage_th_output_tok: '输出 token', usage_th_cost: '花费',
+
+    log_none_yet: '还没有记录的会话。', log_no_actions: '没有操作记录。',
+    log_actions_word: '次操作', log_errors_word: '个错误',
+
+    models_none: '暂无模型信息。', models_th_model: '模型', models_th_stream: '流式输出',
+    models_th_tools: '工具调用', models_th_context: '上下文窗口', models_th_price_in: '每百万输入token', models_th_price_out: '每百万输出token',
+    models_note: '数据为尽力而为，可能已过时 -- 在用于容量规划前请以服务商官方文档为准。',
+
+    config_th_key: '键', config_th_value: '值', config_confirm_unset: '取消设置"{key}"？',
+    config_none_set: '尚未设置任何配置。', config_enter_key_first: '请先输入一个 API 密钥。', config_saving: '正在保存...',
+    config_saved_to: '已保存到 {path}。', config_verify_result: ' 验证结果：[{status}] {message}',
+    config_default_set: ' 默认模型已设为 {model}。',
+    config_fetching_models: '正在获取可用模型...', config_model_fetch_failed: '无法获取实时模型列表：{error}',
+    config_pick_model_label: '为 {provider} 选择一个具体模型（从你的账户实时获取）：',
+    config_use_as_default: '设为默认', config_model_set_to: '默认模型已设为 {model}。',
+
+    proj_enter_path: '请先输入一个路径。', proj_browse_error: '无法浏览该路径。',
+    proj_up: '..（上一级）', proj_no_subfolders: '没有子文件夹', proj_recent_label: '最近使用的项目',
+    proj_switched: '已切换到 {root}',
+    proj_not_initialized_suffix: ' -- 这还不是一个 Mazu 项目，请见上方提示条。',
+    proj_chat_still_old_suffix: ' -- 当前打开的对话仍在使用之前的文件夹；请新建一个对话以在此文件夹中工作。',
+    proj_chat_system_note: '[项目] 已切换到 {root}，但此对话仍在其原来的文件夹中工作。请新建一个对话以使用新文件夹。',
+    proj_switch_failed: '切换失败。',
+
+    history_none_yet: '还没有对话会话。', history_th_title: '标题', history_th_updated: '更新时间',
+    history_th_messages: '消息数', history_no_title: '（无标题）',
+    history_confirm_delete: '永久删除此对话会话？此操作无法撤销。',
+
+    run_alert_enter_task: '请输入任务，或使用下方的"继续"/"分叉"。',
+    run_alert_fork_required: '分叉需要任务、检查点 ID 和分支名称，三者缺一不可。',
+    explore_alert_enter_models: '请至少添加一个模型，或勾选自动选模型。',
+  },
+};
+// Looks up `key` in the CURRENT language (read fresh from <html lang>, not
+// cached) so dynamic content rendered on-demand -- a table built when a tab
+// loads, an alert shown on click -- always reflects whatever language is
+// active at that moment, not whatever it was when the page first loaded.
+// `params` does simple {name} substitution for the handful of dynamic strings
+// that embed a value (a checkpoint id, a count, an error reason).
+function t(key, params) {
+  const lang = document.documentElement.lang || 'en';
+  let text = (TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) ?? TRANSLATIONS.en[key] ?? key;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      text = text.replaceAll(`{${k}}`, v);
+    }
+  }
+  return text;
+}
+function applyLanguage(lang) {
+  const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (dict[key] != null) el.textContent = dict[key];
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (dict[key] != null) el.placeholder = dict[key];
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    if (dict[key] != null) el.title = dict[key];
+  });
+  document.documentElement.lang = lang;
+  localStorage.setItem(LANG_STORAGE_KEY, lang);
+  const btn = $('#lang-toggle');
+  if (btn) btn.textContent = LANG_SHORT_LABEL[lang] || lang.toUpperCase();
+}
+const LANG_ORDER = ['en', 'zh', 'az'];
+const LANG_SHORT_LABEL = {en: 'EN', zh: '中', az: 'AZ'};
+$('#lang-toggle').addEventListener('click', () => {
+  const current = document.documentElement.lang;
+  const next = LANG_ORDER[(LANG_ORDER.indexOf(current) + 1) % LANG_ORDER.length];
+  applyLanguage(next);
+});
+applyLanguage(localStorage.getItem(LANG_STORAGE_KEY) || 'en');
+
 // -- tabs ---------------------------------------------------------------
 const loaders = {
   checkpoints: loadCheckpoints, memory: loadMemory, skills: loadSkills,
   curator: loadCurator,
   runs: loadRuns, router: loadRouter, usage: loadUsage, log: loadLogSessions,
   config: loadConfig, models: loadModels, doctor: loadDoctor, history: loadHistory,
+  chat: () => { loadChatModelSelector(); loadChatEffortSelector(); },
+  explore: loadExploreTestCommandSuggestion,
 };
 $$('#nav button').forEach(btn => btn.addEventListener('click', () => {
   $$('#nav button').forEach(b => b.classList.remove('active'));
@@ -534,6 +1394,272 @@ $('#init-banner-btn').addEventListener('click', async () => {
 });
 checkStatus();
 
+// -- shared live-model lookup: which providers currently have a key configured,
+// and what that provider's own API says it can serve right now (GET
+// /api/models/<provider>/live -- see mazu/llm/client.py's list_models(), a
+// real call to each provider's own API, not a hardcoded list). Used by both
+// the Chat page's single-select model chip and Explore's multi-select model
+// picker below, so "which models exist" is answered in exactly one place.
+const PROVIDER_KEY_CONFIG_NAMES = {
+  anthropic: 'anthropic_api_key', openai: 'openai_api_key',
+  deepseek: 'deepseek_api_key', gemini: 'gemini_api_key',
+};
+
+async function fetchLiveModelsByProvider() {
+  const cfg = await (await fetch('/api/config')).json();
+  const configuredProviders = Object.entries(PROVIDER_KEY_CONFIG_NAMES)
+    .filter(([, configKey]) => cfg[configKey])
+    .map(([provider]) => provider);
+  const byProvider = {};
+  for (const provider of configuredProviders) {
+    try {
+      const res = await fetch(`/api/models/${encodeURIComponent(provider)}/live`);
+      const data = await res.json();
+      if (res.ok && data.models && data.models.length) byProvider[provider] = data.models;
+    } catch (e) { /* best-effort per provider -- one bad key must not blank the whole picker */ }
+  }
+  return {cfg, byProvider};
+}
+
+// -- chat model selector: single source of truth is config.toml's default_model
+// (same GET/POST /api/config the Config page's "Use as default" button already
+// uses) -- there is no separate "chat model" setting, so picking a model here or
+// on the Config page both just write default_model, and each place re-reads it
+// fresh on its own load.
+async function loadChatModelSelector() {
+  const select = $('#chat-model-select');
+  if (!select) return;
+  select.innerHTML = `<option value="">${esc(t('chat_model_loading'))}</option>`;
+  const {cfg, byProvider} = await fetchLiveModelsByProvider();
+  const currentDefault = cfg.default_model || '';
+
+  const optgroups = Object.entries(byProvider).map(([provider, models]) => {
+    const options = models
+      .map(m => `<option value="${esc(provider + ':' + m)}">${esc(provider + ':' + m)}</option>`)
+      .join('');
+    return `<optgroup label="${esc(provider)}">${options}</optgroup>`;
+  });
+
+  // A provider's live catalog can legitimately omit the currently configured
+  // default (e.g. DeepSeek's own /v1/models doesn't list its "deepseek-chat"/
+  // "deepseek-reasoner" human aliases even though they work) -- always keep the
+  // active default selectable rather than silently losing the selection.
+  const combined = optgroups.join('');
+  if (currentDefault && !combined.includes(`value="${currentDefault}"`)) {
+    optgroups.unshift(`<option value="${esc(currentDefault)}">${esc(currentDefault)} ${esc(t('chat_model_current_suffix'))}</option>`);
+  }
+  select.innerHTML = optgroups.join('') || `<option value="">${esc(t('chat_model_none'))}</option>`;
+  if (currentDefault) select.value = currentDefault;
+  // Whichever of loadChatModelSelector/loadChatEffortSelector finishes last
+  // "wins" here -- both call this, cheaply (fetch is cached), so the effort
+  // chip's disabled state always ends up reflecting the model that's actually
+  // selected regardless of which of the two async loads settles first.
+  updateEffortSelectorAvailability();
+}
+
+// -- Explore's multi-model picker: same live per-provider catalogs as the chat
+// selector above, but as a checklist (Explore compares N models against each
+// other, not a single active one). Selections are tracked in
+// exploreSelectedModels and rendered as removable chips; the Explore submit
+// handler joins them into the same comma-separated "models" string the
+// backend (POST /api/explore) already expects -- no backend change needed,
+// only how that string gets built.
+let exploreSelectedModels = [];
+
+function renderExploreModelChips() {
+  const wrap = $('#explore-models-chips');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  exploreSelectedModels.forEach((model, index) => {
+    const chip = document.createElement('span');
+    chip.className = 'model-chip-tag';
+    const label = document.createElement('span');
+    label.textContent = model;
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.textContent = '×';
+    removeBtn.setAttribute('aria-label', t('chat_remove_attachment'));
+    removeBtn.onclick = () => {
+      exploreSelectedModels.splice(index, 1);
+      renderExploreModelChips();
+    };
+    chip.appendChild(label);
+    chip.appendChild(removeBtn);
+    wrap.appendChild(chip);
+  });
+  updateExploreCostWarning();
+}
+
+function renderExploreModelsDropdown(byProvider) {
+  const dd = $('#explore-models-dropdown');
+  const entries = Object.entries(byProvider);
+  if (!entries.length) {
+    dd.innerHTML = `<div class="model-multiselect-empty">${esc(t('chat_model_none'))}</div>`;
+    return;
+  }
+  dd.innerHTML = entries.map(([provider, models]) => {
+    const items = models.map(m => {
+      const full = `${provider}:${m}`;
+      const checked = exploreSelectedModels.includes(full) ? 'checked' : '';
+      return `<label class="model-multiselect-item"><input type="checkbox" value="${esc(full)}" ${checked}> ${esc(full)}</label>`;
+    }).join('');
+    return `<div class="model-multiselect-group"><div class="model-multiselect-group-label">${esc(provider)}</div>${items}</div>`;
+  }).join('');
+  $$('input[type=checkbox]', dd).forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) {
+        if (!exploreSelectedModels.includes(cb.value)) exploreSelectedModels.push(cb.value);
+      } else {
+        exploreSelectedModels = exploreSelectedModels.filter(m => m !== cb.value);
+      }
+      renderExploreModelChips();
+    });
+  });
+}
+
+async function toggleExploreModelsDropdown() {
+  const dd = $('#explore-models-dropdown');
+  if (dd.style.display === 'block') { dd.style.display = 'none'; return; }
+  // Fetched fresh on every open (not cached) -- a key added on the Config page
+  // moments ago must show up immediately, not after a stale snapshot expires.
+  dd.innerHTML = `<div class="model-multiselect-empty">${esc(t('chat_model_loading'))}</div>`;
+  dd.style.display = 'block';
+  const {byProvider} = await fetchLiveModelsByProvider();
+  renderExploreModelsDropdown(byProvider);
+}
+
+$('#explore-models-add-btn').addEventListener('click', (e) => {
+  e.preventDefault();
+  toggleExploreModelsDropdown();
+});
+document.addEventListener('click', (e) => {
+  const picker = $('#explore-models-picker');
+  const dd = $('#explore-models-dropdown');
+  if (picker && dd && dd.style.display === 'block' && !picker.contains(e.target)) {
+    dd.style.display = 'none';
+  }
+});
+
+// -- Explore's "Detected: ... [Use it]" test-command suggestion. Purely a
+// suggestion the user must explicitly click -- GET /api/explore/detect-test-
+// command (mazu/runs/detect_test_command.py) only reads a handful of small
+// marker files (pytest.ini, package.json, ...) on the server, it never
+// executes anything and this never auto-fills the input on its own.
+async function loadExploreTestCommandSuggestion() {
+  const box = $('#explore-test-command-suggestion');
+  if (!box) return;
+  box.style.display = 'none';
+  let suggestion;
+  try {
+    const data = await (await fetch('/api/explore/detect-test-command')).json();
+    suggestion = data.suggestion;
+  } catch (e) {
+    return; // best-effort -- a failed lookup just means no suggestion shown
+  }
+  if (!suggestion) return;
+  box.innerHTML = '';
+  const label = document.createElement('span');
+  label.textContent = t('explore_detected_command', {command: suggestion});
+  const useBtn = document.createElement('button');
+  useBtn.type = 'button';
+  useBtn.className = 'btn ghost small';
+  useBtn.style.marginLeft = '8px';
+  useBtn.textContent = t('explore_use_suggestion');
+  useBtn.onclick = () => { $('#explore-test-command').value = suggestion; box.style.display = 'none'; };
+  box.appendChild(label);
+  box.appendChild(useBtn);
+  box.style.display = 'block';
+}
+
+$('#chat-model-select').addEventListener('change', async () => {
+  const value = $('#chat-model-select').value;
+  if (!value) return;
+  await fetch('/api/config', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key: 'default_model', value}),
+  });
+  // Also apply live to the currently open session -- without this, the change
+  // above only takes effect for sessions started after it (config.toml's
+  // default_model), leaving the session on screen right now silently on the
+  // old model until the user starts a brand new chat.
+  if (sessionId) {
+    const res = await fetch(`/api/chat/${sessionId}/model`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({model: value}),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      $('#model-badge').textContent = data.model;
+    }
+  }
+  updateEffortSelectorAvailability();
+  updateVisionWarning();
+});
+
+// -- reasoning effort chip: same single-source-of-truth pattern as the model
+// chip above (config.toml's `reasoning_effort`, via the same GET/POST
+// /api/config the Config page's generic "Set a value" form can also write) --
+// DeepSeek/local ACCEPT this value but silently ignore it server-side (see
+// mazu/llm/providers/openai_compatible.py's supports_reasoning_effort) -- real
+// bug found live: the dropdown looked identically active for every provider,
+// so picking "high" for a DeepSeek session looked like it worked but never
+// reached the API. updateEffortSelectorAvailability() below fixes that by
+// disabling the control (and saying why) whenever the CURRENTLY selected
+// MODEL doesn't support it -- fetched per-model from /api/providers/
+// reasoning-effort-support, which calls the same Provider.
+// supports_reasoning_effort_for() run_turn's own capability checks are built
+// on, not a hand-duplicated list. Per-model, not just per-provider: a second
+// real bug found live was that a per-PROVIDER-only check left the chip
+// "active" for openai:gpt-4o (a non-reasoning OpenAI model that rejects the
+// parameter with a 400) since OpenAI-the-provider does support it for SOME
+// of its models.
+let _reasoningEffortSupportCache = {};
+async function _modelSupportsReasoningEffort(model) {
+  if (!(model in _reasoningEffortSupportCache)) {
+    const res = await (await fetch(`/api/providers/reasoning-effort-support?model=${encodeURIComponent(model)}`)).json();
+    _reasoningEffortSupportCache[model] = res.supported;
+  }
+  return _reasoningEffortSupportCache[model];
+}
+
+async function updateEffortSelectorAvailability() {
+  const select = $('#chat-effort-select');
+  const chip = select ? select.closest('.model-chip') : null;
+  if (!select || !chip) return;
+  const modelValue = $('#chat-model-select').value || '';
+  // No model selected yet (still loading): fail open rather than disabling a
+  // control that might actually work once a model is picked.
+  const supported = modelValue ? await _modelSupportsReasoningEffort(modelValue) : true;
+  select.disabled = !supported;
+  chip.classList.toggle('model-chip-disabled', !supported);
+  chip.title = supported
+    ? t('chat_effort_select_title')
+    : t('chat_effort_unsupported_title', {model: modelValue});
+}
+
+async function loadChatEffortSelector() {
+  const select = $('#chat-effort-select');
+  if (!select) return;
+  const cfg = await (await fetch('/api/config')).json();
+  select.value = cfg.reasoning_effort || '';
+  updateEffortSelectorAvailability();
+}
+
+$('#chat-effort-select').addEventListener('change', async () => {
+  const value = $('#chat-effort-select').value;
+  if (value) {
+    await fetch('/api/config', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key: 'reasoning_effort', value}),
+    });
+  } else {
+    await fetch('/api/config/reasoning_effort', {method: 'DELETE'});
+  }
+});
+
+loadChatModelSelector();
+loadChatEffortSelector();
+
 // -- project folder switcher (Config tab) --------------------------------
 $('#project-path-input').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
 
@@ -543,7 +1669,7 @@ async function browseProject(path) {
   const data = await res.json();
   const body = $('#project-browse-body');
   if (!res.ok) {
-    body.innerHTML = `<div class="msg error" style="max-width:none;">${esc(data.error || 'Could not browse that path.')}</div>`;
+    body.innerHTML = `<div class="msg error" style="max-width:none;">${esc(data.error || t('proj_browse_error'))}</div>`;
     body.style.display = 'block';
     return;
   }
@@ -552,10 +1678,10 @@ async function browseProject(path) {
   const sep = data.path.includes('\\') ? '\\' : '/';
   let html = '<div class="mono-block" style="max-height:220px;">';
   if (data.parent) {
-    html += `<div style="margin-bottom:4px;"><a href="#" class="project-browse-link" data-path="${esc(data.parent)}">.. (up)</a></div>`;
+    html += `<div style="margin-bottom:4px;"><a href="#" class="project-browse-link" data-path="${esc(data.parent)}">${esc(t('proj_up'))}</a></div>`;
   }
   if (data.dirs.length === 0) {
-    html += '<div class="empty" style="padding:6px 0;">No subfolders</div>';
+    html += `<div class="empty" style="padding:6px 0;">${esc(t('proj_no_subfolders'))}</div>`;
   }
   for (const d of data.dirs) {
     const full = data.path.replace(/[\\/]+$/, '') + sep + d;
@@ -571,25 +1697,47 @@ async function browseProject(path) {
 }
 $('#project-browse-btn').addEventListener('click', () => browseProject($('#project-path-input').value.trim() || undefined));
 
-$('#project-switch-btn').addEventListener('click', async () => {
-  const path = $('#project-path-input').value.trim();
+async function switchProjectTo(path) {
   const result = $('#project-switch-result');
-  if (!path) { result.textContent = 'Enter a path first.'; result.style.color = 'var(--bad)'; return; }
+  if (!path) { result.textContent = t('proj_enter_path'); result.style.color = 'var(--bad)'; return; }
   const res = await fetch('/api/project/switch', {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({path}),
   });
   const data = await res.json();
   if (!res.ok) {
-    result.textContent = data.error || 'Failed to switch.';
+    result.textContent = data.error || t('proj_switch_failed');
     result.style.color = 'var(--bad)';
     return;
   }
-  result.textContent = 'Switched to ' + data.root + (data.initialized ? '' : ' -- not a Mazu project yet, see the banner above.');
+  let msg = t('proj_switched', {root: data.root}) + (data.initialized ? '' : t('proj_not_initialized_suffix'));
+  if (sessionId) {
+    msg += t('proj_chat_still_old_suffix');
+    appendMsg('system', t('proj_chat_system_note', {root: data.root}));
+  }
+  result.textContent = msg;
   result.style.color = 'var(--ok)';
   $('#project-browse-body').style.display = 'none';
   delete $('#project-path-input').dataset.touched;
   checkStatus();
-});
+  loadRecentProjects();
+}
+$('#project-switch-btn').addEventListener('click', () => switchProjectTo($('#project-path-input').value.trim()));
+
+async function loadRecentProjects() {
+  const box = $('#project-recent');
+  const data = await (await fetch('/api/project/recent')).json();
+  const projects = data.projects || [];
+  if (!projects.length) { box.innerHTML = ''; return; }
+  let html = `<label style="display:block; margin-bottom:6px;">${esc(t('proj_recent_label'))}</label>`;
+  for (const p of projects) {
+    html += `<div style="margin-bottom:4px;"><a href="#" class="recent-project-link" data-path="${esc(p)}">${esc(p)}</a></div>`;
+  }
+  box.innerHTML = html;
+  $$('.recent-project-link', box).forEach(a => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    switchProjectTo(a.dataset.path);
+  }));
+}
 
 // =========================================================================
 // CHAT
@@ -599,11 +1747,37 @@ let currentAssistantEl = null;
 let chatEventSource = null;
 const CHAT_SESSION_STORAGE_KEY = 'mazuChatSessionId';
 
-function appendMsg(role, text) {
+function appendMsg(role, text, images, files) {
   const log = $('#chat-log');
   const el = document.createElement('div');
   el.className = 'msg ' + role;
-  el.textContent = text;
+  if (images && images.length) {
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'msg-images';
+    images.forEach(img => {
+      const imageEl = document.createElement('img');
+      imageEl.className = 'msg-image-thumb';
+      imageEl.src = `data:${img.media_type};base64,${img.data}`;
+      imgWrap.appendChild(imageEl);
+    });
+    el.appendChild(imgWrap);
+  }
+  if (files && files.length) {
+    const fileWrap = document.createElement('div');
+    fileWrap.className = 'msg-files';
+    files.forEach(f => {
+      const chip = document.createElement('span');
+      chip.className = 'msg-file-chip';
+      chip.textContent = '\u{1F4C4} ' + f.filename;
+      fileWrap.appendChild(chip);
+    });
+    el.appendChild(fileWrap);
+  }
+  if (text) {
+    const textEl = document.createElement('div');
+    textEl.textContent = text;
+    el.appendChild(textEl);
+  }
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
   return el;
@@ -616,9 +1790,9 @@ function appendConfirm(toolName, toolInput) {
   card.innerHTML = `<div class="tool-call">${esc(toolName)}(${esc(JSON.stringify(toolInput))})</div><div class="btns"></div>`;
   const btns = card.querySelector('.btns');
   const approve = document.createElement('button');
-  approve.className = 'btn small'; approve.textContent = 'Run it';
+  approve.className = 'btn small'; approve.textContent = t('btn_run_it');
   const deny = document.createElement('button');
-  deny.className = 'btn small ghost'; deny.textContent = 'Decline';
+  deny.className = 'btn small ghost'; deny.textContent = t('btn_decline');
   approve.onclick = () => { respondConfirm(true); card.remove(); };
   deny.onclick = () => { respondConfirm(false); card.remove(); };
   btns.appendChild(approve); btns.appendChild(deny);
@@ -643,6 +1817,16 @@ function renderMessageHistory(messages) {
   for (const m of messages) {
     if (m.role === 'user' && typeof m.content === 'string') {
       appendMsg('user', m.content);
+    } else if (m.role === 'user' && Array.isArray(m.content)) {
+      // A real user turn with an image attachment (see chat_session.py's
+      // _handle_message) -- distinct from a pure tool_result continuation
+      // message, which also has role "user" + array content but no image/text
+      // blocks and so renders nothing here, same as before this branch existed.
+      const images = m.content
+        .filter(b => b.type === 'image')
+        .map(b => ({media_type: b.source.media_type, data: b.source.data}));
+      const text = m.content.filter(b => b.type === 'text').map(b => b.text).join('');
+      if (images.length || text) appendMsg('user', text, images);
     } else if (m.role === 'assistant' && Array.isArray(m.content)) {
       const text = m.content.filter(b => b.type === 'text').map(b => b.text).join('');
       if (text) appendMsg('assistant', text);
@@ -653,6 +1837,7 @@ function renderMessageHistory(messages) {
 async function startSession(resumeId) {
   if (chatEventSource) { chatEventSource.close(); chatEventSource = null; }
   const body = resumeId ? {resume: resumeId} : {};
+  body.auto_approve = $('#auto-approve-toggle').checked;
   const res = await fetch('/api/chat/start', {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
   });
@@ -668,6 +1853,7 @@ async function startSession(resumeId) {
   sessionId = data.session_id;
   localStorage.setItem(CHAT_SESSION_STORAGE_KEY, sessionId);
   $('#model-badge').textContent = data.model;
+  $('#auto-approve-toggle').checked = !!data.auto_approve;
   if (resumeId) {
     const history = await (await fetch(`/api/chat/sessions/${sessionId}/messages`)).json();
     renderMessageHistory(history);
@@ -681,10 +1867,18 @@ async function startSession(resumeId) {
       $('#chat-log').scrollTop = $('#chat-log').scrollHeight;
     } else if (event.type === 'usage') {
       currentAssistantEl = null;
-      const suffix = event.total_cost != null ? ` | ~${fmtCost(event.total_cost)} total` : '';
+      // total_cost is only null when this model has no pricing data at all
+      // (estimate_cost() can't look it up) -- say so explicitly instead of
+      // quietly showing no cost figure, which used to look identical to
+      // tracking simply having nothing to report yet.
+      const suffix = event.total_cost != null
+        ? ` | ~${fmtCost(event.step_cost)} this message, ~${fmtCost(event.total_cost)} total`
+        : ' | cost unknown for this model (no pricing data)';
       appendMsg('system', `[usage] ${event.text}${suffix}`);
     } else if (event.type === 'info') {
       appendMsg('system', `[memory] ${event.text}`);
+    } else if (event.type === 'tool_auto_run') {
+      appendMsg('system', `[auto] ${event.text}`);
     } else if (event.type === 'router_suggestion') {
       appendMsg('system', event.text);
     } else if (event.type === 'context_compacted') {
@@ -702,18 +1896,165 @@ async function startSession(resumeId) {
   };
 }
 
+// -- attachments: images are staged client-side as {media_type, data (base64,
+// no data: prefix), previewUrl (full data: URI for the <img> tag)}; documents
+// (.docx/.pdf/.xlsx/text/code) are staged as {filename, data (base64)} with no
+// preview, since their content only becomes readable text server-side (see
+// mazu/files/document_extract.py -- there is no client-side extraction at
+// all, on purpose: python-docx/pypdf/openpyxl have no JS equivalent bundled
+// here, so the raw bytes travel to the server exactly like an image's do, and
+// /api/chat/<id>/message's _validate_and_extract_chat_files is what turns
+// them into text before ChatSession ever sees them). Both stay staged until
+// the next send, at which point they go out together in one POST.
+const ALLOWED_CHAT_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+let pendingImages = [];
+let pendingFiles = [];
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+// Real bug found live: attaching an image while chatting with a text-only
+// model (e.g. plain deepseek:deepseek-chat) produced a raw provider error only
+// AFTER sending -- the attach button had no way to know the current model
+// can't see images at all. Best-effort/fail-open (see the backend's
+// Provider.supports_vision_for docstring) -- warns, never blocks attaching or
+// sending, since the user may switch models before they hit Send.
+let _visionSupportCache = {};
+async function _modelSupportsVision(model) {
+  if (!(model in _visionSupportCache)) {
+    const res = await (await fetch(`/api/providers/vision-support?model=${encodeURIComponent(model)}`)).json();
+    _visionSupportCache[model] = res.supported;
+  }
+  return _visionSupportCache[model];
+}
+
+async function updateVisionWarning() {
+  const el = $('#chat-vision-warning');
+  if (!el) return;
+  const model = $('#chat-model-select').value || '';
+  if (!pendingImages.length || !model) { el.style.display = 'none'; return; }
+  const supported = await _modelSupportsVision(model);
+  if (supported) {
+    el.style.display = 'none';
+  } else {
+    el.textContent = t('chat_vision_unsupported_warning', {model});
+    el.style.display = 'block';
+  }
+}
+
+function renderPendingAttachments() {
+  const wrap = $('#chat-pending-attachments');
+  wrap.innerHTML = '';
+  pendingImages.forEach((img, index) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'pending-image-thumb';
+    const imageEl = document.createElement('img');
+    imageEl.src = img.previewUrl;
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.textContent = '×';
+    removeBtn.setAttribute('aria-label', t('chat_remove_attachment'));
+    removeBtn.onclick = () => { pendingImages.splice(index, 1); renderPendingAttachments(); };
+    thumb.appendChild(imageEl);
+    thumb.appendChild(removeBtn);
+    wrap.appendChild(thumb);
+  });
+  pendingFiles.forEach((f, index) => {
+    const chip = document.createElement('div');
+    chip.className = 'pending-file-chip';
+    const icon = document.createElement('span');
+    icon.textContent = '\u{1F4C4}';
+    const nameEl = document.createElement('span');
+    nameEl.className = 'pending-file-name';
+    nameEl.textContent = f.filename;
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.textContent = '×';
+    removeBtn.setAttribute('aria-label', t('chat_remove_attachment'));
+    removeBtn.onclick = () => { pendingFiles.splice(index, 1); renderPendingAttachments(); };
+    chip.appendChild(icon);
+    chip.appendChild(nameEl);
+    chip.appendChild(removeBtn);
+    wrap.appendChild(chip);
+  });
+  updateVisionWarning();
+}
+
+async function addAttachment(file) {
+  const dataUrl = await readFileAsDataUrl(file);
+  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  if (ALLOWED_CHAT_IMAGE_TYPES.includes(file.type)) {
+    pendingImages.push({media_type: file.type, data: base64, previewUrl: dataUrl});
+  } else {
+    pendingFiles.push({filename: file.name, data: base64});
+  }
+  renderPendingAttachments();
+}
+
+$('#chat-attach-btn').addEventListener('click', () => $('#chat-file-input').click());
+$('#chat-file-input').addEventListener('change', async (e) => {
+  for (const file of Array.from(e.target.files)) await addAttachment(file);
+  e.target.value = '';
+});
+$('#chat-input').addEventListener('paste', async (e) => {
+  const items = Array.from(e.clipboardData ? e.clipboardData.items : []);
+  const imageItems = items.filter(it => it.type && it.type.startsWith('image/'));
+  if (!imageItems.length) return;
+  e.preventDefault();
+  for (const item of imageItems) {
+    const file = item.getAsFile();
+    if (file) await addAttachment(file);
+  }
+});
+
 async function sendMessage() {
   const input = $('#chat-input');
   const text = input.value.trim();
-  if (!text) return;
-  appendMsg('user', text);
+  if (!text && !pendingImages.length && !pendingFiles.length) return;
+  const imagesToSend = pendingImages.map(img => ({media_type: img.media_type, data: img.data}));
+  const filesToSend = pendingFiles.map(f => ({filename: f.filename, data: f.data}));
+  const sentImagePreviews = pendingImages.map(img => img.previewUrl);
+  const sentEl = appendMsg('user', text, imagesToSend, filesToSend);
   input.value = '';
+  pendingImages = [];
+  pendingFiles = [];
+  renderPendingAttachments();
   if (!sessionId) await startSession();
-  await fetch(`/api/chat/${sessionId}/message`, {
+  const res = await fetch(`/api/chat/${sessionId}/message`, {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({text}),
+    body: JSON.stringify({text, images: imagesToSend, files: filesToSend}),
   });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    // Real bug found live: on rejection (e.g. an oversized image, or a model
+    // that can't see images), the optimistically-appended bubble above stayed
+    // in the log looking identical to a real, successfully-sent message, and
+    // the typed text/attachments were already cleared from the compose box --
+    // so the user had to notice a small error line below and retype
+    // everything from memory. Now: visibly mark that exact bubble as failed,
+    // and restore its text/attachments into the compose box so nothing is lost.
+    sentEl.classList.add('msg-failed');
+    input.value = text;
+    pendingImages = imagesToSend.map((img, i) => ({...img, previewUrl: sentImagePreviews[i]}));
+    pendingFiles = filesToSend;
+    renderPendingAttachments();
+    appendMsg('error', data.error || t('chat_send_failed'));
+  }
 }
+
+$('#auto-approve-toggle').addEventListener('change', async (e) => {
+  if (!sessionId) return; // no live session yet -- picked up by startSession() on first send
+  await fetch(`/api/chat/${sessionId}/auto_approve`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled: e.target.checked}),
+  });
+});
 
 $('#chat-send').addEventListener('click', sendMessage);
 $('#chat-input').addEventListener('keydown', (e) => {
@@ -742,15 +2083,15 @@ $('#chat-new-btn').addEventListener('click', () => {
 async function loadHistory() {
   const rows = await (await fetch('/api/chat/sessions')).json();
   const body = $('#history-body');
-  if (rows.length === 0) { body.innerHTML = '<div class="empty">No chat sessions yet.</div>'; return; }
-  body.innerHTML = `<table><thead><tr><th>Title</th><th>Updated</th><th>Messages</th><th></th></tr></thead><tbody>${
+  if (rows.length === 0) { body.innerHTML = `<div class="empty">${esc(t('history_none_yet'))}</div>`; return; }
+  body.innerHTML = `<table><thead><tr><th>${esc(t('history_th_title'))}</th><th>${esc(t('history_th_updated'))}</th><th>${esc(t('history_th_messages'))}</th><th></th></tr></thead><tbody>${
     rows.map(r => `<tr>
-      <td>${esc(r.title || '(no title)')}</td>
+      <td>${esc(r.title || t('history_no_title'))}</td>
       <td>${esc(r.updated_at)}</td>
       <td>${r.message_count}</td>
       <td class="row-actions">
-        <button class="btn ghost small history-resume-btn" data-session="${esc(r.session_id)}">Resume</button>
-        <button class="btn danger small history-delete-btn" data-session="${esc(r.session_id)}">Delete</button>
+        <button class="btn ghost small history-resume-btn" data-session="${esc(r.session_id)}">${esc(t('btn_resume'))}</button>
+        <button class="btn danger small history-delete-btn" data-session="${esc(r.session_id)}">${esc(t('btn_delete'))}</button>
       </td>
     </tr>`).join('')
   }</tbody></table>`;
@@ -763,7 +2104,7 @@ async function loadHistory() {
   }));
   $$('.history-delete-btn', body).forEach(btn => btn.addEventListener('click', async () => {
     const target = btn.dataset.session;
-    if (!confirm('Delete this chat session permanently? This cannot be undone.')) return;
+    if (!confirm(t('history_confirm_delete'))) return;
     await fetch(`/api/chat/sessions/${target}`, {method: 'DELETE'});
     if (target === sessionId) {
       // The session showing in the Chat tab right now was just deleted -- clear
@@ -776,6 +2117,113 @@ async function loadHistory() {
     loadHistory();
   }));
 }
+
+// =========================================================================
+// Max-cost "will this actually be enforced?" warning -- shared by Run/
+// Explore/Council. Real bug found live: estimate_cost() (mazu/llm/
+// pricing.py) has no entry for a newly-discovered live model, which makes
+// autonomous.py's own --max-cost enforcement silently a no-op -- typing "$2"
+// against such a model looked identical to a real limit, with nothing
+// anywhere saying it wasn't one. Checked against POST /api/cost-trackable,
+// the same estimate_cost() call the backend itself uses to decide whether to
+// enforce, so this can never drift from what the run actually does.
+// =========================================================================
+let _costTrackableCache = {};
+async function _untrackedModels(models) {
+  const uncached = models.filter(m => !(m in _costTrackableCache));
+  if (uncached.length) {
+    const res = await (await fetch('/api/cost-trackable', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({models: uncached}),
+    })).json();
+    Object.assign(_costTrackableCache, res);
+  }
+  return models.filter(m => _costTrackableCache[m] === false);
+}
+
+async function updateCostWarning(warningId, maxCostValue, models) {
+  const el = $('#' + warningId);
+  if (!el) return;
+  const maxCost = (maxCostValue || '').trim();
+  const cleanModels = [...new Set((models || []).map(m => m.trim()).filter(Boolean))];
+  if (!maxCost || !cleanModels.length) { el.style.display = 'none'; return; }
+  const untracked = await _untrackedModels(cleanModels);
+  if (untracked.length) {
+    el.textContent = t('cost_untracked_warning', {models: untracked.join(', ')});
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+async function updateRunCostWarning() {
+  const maxCost = $('#run-max-cost').value;
+  let model = $('#run-model').value.trim();
+  if (!model) {
+    // Blank means "use the configured default" (see _runCommonBody), so check
+    // THAT model -- otherwise leaving Model empty would look untracked-clean
+    // just because nothing was typed, regardless of what actually runs.
+    const cfg = await (await fetch('/api/config')).json();
+    model = cfg.default_model || '';
+  }
+  updateCostWarning('run-cost-warning', maxCost, model ? [model] : []);
+}
+$('#run-max-cost').addEventListener('input', updateRunCostWarning);
+$('#run-model').addEventListener('input', updateRunCostWarning);
+
+async function updateExploreCostWarning() {
+  if ($('#explore-auto-models').checked) {
+    // Auto-models picks its models from router history at start time -- there
+    // is nothing concrete to check yet, so there's nothing honest to warn
+    // about either.
+    $('#explore-cost-warning').style.display = 'none';
+    return;
+  }
+  await updateCostWarning('explore-cost-warning', $('#explore-max-cost').value, exploreSelectedModels);
+}
+$('#explore-max-cost').addEventListener('input', updateExploreCostWarning);
+$('#explore-auto-models').addEventListener('change', updateExploreCostWarning);
+
+// Mirrors mazu/cli.py's own DEFAULT_COUNCIL_MODELS/DEFAULT_COUNCIL_LEAD -- the
+// resolution order a blank field actually falls through to server-side
+// (typed value -> config.toml's council_models/council_lead -> these
+// hardcoded defaults). Checking only what's TYPED would miss a genuinely
+// untracked model hiding behind a blank field resolving to one of the first
+// two, which is exactly the class of bug this whole warning exists to catch.
+const _DEFAULT_COUNCIL_MODELS = 'anthropic:claude-sonnet-5,anthropic:claude-opus-4-8';
+const _DEFAULT_COUNCIL_LEAD = 'anthropic:claude-opus-4-8';
+
+async function updateCouncilCostWarning() {
+  const typedModels = $('#council-models').value.split(',').map(m => m.trim()).filter(Boolean);
+  const typedLead = $('#council-lead').value.trim();
+  let models = typedModels;
+  let lead = typedLead;
+  if (!models.length || !lead) {
+    const cfg = await (await fetch('/api/config')).json();
+    if (!models.length) {
+      models = (cfg.council_models || _DEFAULT_COUNCIL_MODELS).split(',').map(m => m.trim()).filter(Boolean);
+    }
+    if (!lead) {
+      lead = cfg.council_lead || _DEFAULT_COUNCIL_LEAD;
+    }
+  }
+  if (lead) models.push(lead);
+  await updateCostWarning('council-cost-warning', $('#council-max-cost').value, models);
+}
+$('#council-max-cost').addEventListener('input', updateCouncilCostWarning);
+$('#council-models').addEventListener('input', updateCouncilCostWarning);
+$('#council-lead').addEventListener('input', updateCouncilCostWarning);
+
+async function updateCuratorCostWarning() {
+  // Curator has no per-run model field (it always uses config.toml's
+  // curator_model, required non-null just to enable the tab at all -- see
+  // mazu/curator/config.py's curator_configured()), so the model to check is
+  // always the currently configured one, not something read off this form.
+  const cfg = await (await fetch('/api/config')).json();
+  const model = cfg.curator_model || '';
+  updateCostWarning('curator-cost-warning', $('#curator-max-cost').value, model ? [model] : []);
+}
+$('#curator-max-cost').addEventListener('input', updateCuratorCostWarning);
 
 // =========================================================================
 // RUN / EXPLORE -- shared task-stream helper
@@ -801,6 +2249,7 @@ function _runCommonBody() {
     checkpoint_every: parseInt($('#run-checkpoint-every').value || '1', 10),
     allow_shell: $('#run-allow-shell').checked,
     dry_run: $('#run-dry-run').checked,
+    auto_commit_baseline: $('#run-auto-commit-baseline').checked,
   };
   const maxCost = $('#run-max-cost').value;
   if (maxCost) body.max_cost = parseFloat(maxCost);
@@ -823,7 +2272,7 @@ async function _startRun(body) {
 
 $('#run-start').addEventListener('click', () => {
   const task = $('#run-task').value.trim();
-  if (!task) { alert('Enter a task, or use Resume / Fork below.'); return; }
+  if (!task) { alert(t('run_alert_enter_task')); return; }
   _startRun({...(_runCommonBody()), task});
 });
 
@@ -837,16 +2286,16 @@ $('#run-fork-start').addEventListener('click', () => {
   const task = $('#run-task').value.trim();
   const checkpointId = $('#run-fork-checkpoint').value.trim();
   const branch = $('#run-fork-branch').value.trim();
-  if (!task || !checkpointId || !branch) { alert('Task, checkpoint id, and branch name are all required to fork.'); return; }
+  if (!task || !checkpointId || !branch) { alert(t('run_alert_fork_required')); return; }
   _startRun({...(_runCommonBody()), task, from_checkpoint: checkpointId, branch});
 });
 
 $('#explore-start').addEventListener('click', async () => {
   const task = $('#explore-task').value.trim();
   const autoModels = $('#explore-auto-models').checked;
-  const models = $('#explore-models').value.trim();
+  const models = exploreSelectedModels.join(',');
   if (!task) return;
-  if (!autoModels && !models) { alert('Enter models, or check Auto-models.'); return; }
+  if (!autoModels && !models) { alert(t('explore_alert_enter_models')); return; }
   const body = {
     task,
     max_steps: parseInt($('#explore-max-steps').value || '15', 10),
@@ -893,9 +2342,9 @@ $('#council-start').addEventListener('click', async () => {
 // =========================================================================
 async function loadCheckpoints() {
   const body = $('#checkpoints-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const rows = await (await fetch('/api/checkpoints')).json();
-  if (!rows.length) { body.textContent = 'No checkpoints yet.'; return; }
+  if (!rows.length) { body.textContent = t('cp_none_yet'); return; }
   body.className = ''; body.innerHTML = '';
   rows.forEach(cp => {
     const card = document.createElement('div');
@@ -907,11 +2356,11 @@ async function loadCheckpoints() {
       </div>
       <div style="margin-top:6px; color:var(--muted);">${esc(cp.summary || '')}</div>
       <div class="row-actions" style="margin-top:10px;">
-        <button class="btn small ghost" data-act="diff">Diff</button>
-        <button class="btn small ghost" data-act="inspect">Inspect</button>
-        <button class="btn small ghost" data-act="compare">Compare with...</button>
-        <button class="btn small ghost" data-act="branch">Branch from</button>
-        <button class="btn small" data-act="rollback">Rollback</button>
+        <button class="btn small ghost" data-act="diff">${esc(t('btn_diff'))}</button>
+        <button class="btn small ghost" data-act="inspect">${esc(t('btn_inspect'))}</button>
+        <button class="btn small ghost" data-act="compare">${esc(t('btn_compare_with'))}</button>
+        <button class="btn small ghost" data-act="branch">${esc(t('btn_branch_from'))}</button>
+        <button class="btn small" data-act="rollback">${esc(t('btn_rollback'))}</button>
       </div>
       <div class="diff-panel mono-block" style="display:none; margin-top:10px;"></div>
     `;
@@ -919,46 +2368,57 @@ async function loadCheckpoints() {
       const panel = card.querySelector('.diff-panel');
       if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
       panel.style.display = 'block';
-      panel.textContent = 'Loading diff...';
+      panel.textContent = t('cp_loading_diff');
       const res = await fetch(`/api/checkpoints/${cp.id}/diff`);
       const data = await res.json();
-      panel.textContent = res.ok ? (data.diff_stat || '(no changes)') : data.error;
+      panel.textContent = res.ok ? (data.diff_stat || t('cp_no_changes')) : data.error;
     };
     card.querySelector('[data-act=inspect]').onclick = async () => {
       const panel = card.querySelector('.diff-panel');
       if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
       panel.style.display = 'block';
-      panel.textContent = 'Loading...';
+      panel.textContent = t('loading');
       const res = await fetch(`/api/checkpoints/${cp.id}/inspect`);
       const data = await res.json();
       if (!res.ok) { panel.textContent = data.error; return; }
       panel.textContent = JSON.stringify({entry: data.entry, memory: data.memory, conversation: data.conversation}, null, 2);
     };
     card.querySelector('[data-act=compare]').onclick = async () => {
-      const otherId = prompt('Compare with which checkpoint id?');
+      const otherId = prompt(t('cp_prompt_compare'));
       if (!otherId) return;
       const panel = card.querySelector('.diff-panel');
       panel.style.display = 'block';
-      panel.textContent = 'Loading comparison...';
+      panel.textContent = t('cp_loading_comparison');
       const res = await fetch(`/api/checkpoints/compare?a=${encodeURIComponent(cp.id)}&b=${encodeURIComponent(otherId)}`);
       const data = await res.json();
-      panel.textContent = res.ok ? (data.diff || '(no changes)') : data.error;
+      panel.textContent = res.ok ? (data.diff || t('cp_no_changes')) : data.error;
     };
     card.querySelector('[data-act=branch]').onclick = async () => {
-      const branchName = prompt(`New branch name, pointing at ${cp.id} (your current branch/working tree is untouched):`);
+      const branchName = prompt(t('cp_prompt_branch_name', {id: cp.id}));
       if (!branchName) return;
       const res = await fetch(`/api/checkpoints/${cp.id}/branch-from`, {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({branch_name: branchName}),
       });
       const data = await res.json();
-      alert(data.error || `Created branch '${branchName}' at ${cp.id}. Switch with: git checkout ${branchName}`);
+      alert(data.error || t('cp_branch_created', {branch: branchName, id: cp.id}));
     };
     card.querySelector('[data-act=rollback]').onclick = async () => {
-      if (!confirm(`Rollback to ${cp.id}? This discards code, memory, and conversation state since then.`)) return;
+      // Real bug found live: this dialog only ever mentioned code/memory/
+      // conversation -- CheckpointManager.restore() (mazu/checkpoint/manager.py)
+      // also unconditionally wipes .mazu/skills/ (never covered by `git clean`,
+      // since .mazu/ is gitignored), restoring it only if THIS checkpoint has its
+      // own skills snapshot. A checkpoint taken before skill capture existed (or
+      // simply never snapshotted skills) means current skills are permanently
+      // deleted, not "rolled back" -- worth a sharper warning than the generic one.
+      let message = t('cp_confirm_rollback', {id: cp.id});
+      if (!cp.has_skills_snapshot) {
+        message += ' ' + t('cp_confirm_rollback_no_skills_snapshot');
+      }
+      if (!confirm(message)) return;
       const res = await fetch(`/api/checkpoints/${cp.id}/rollback`, {method: 'POST'});
       const data = await res.json();
-      alert(data.error || `Restored to ${cp.id}.`);
+      alert(data.error || t('cp_restored', {id: cp.id}));
     };
     body.appendChild(card);
   });
@@ -967,20 +2427,20 @@ async function loadCheckpoints() {
 $('#take-checkpoint-btn').addEventListener('click', async () => {
   const res = await fetch('/api/checkpoints', {method: 'POST'});
   const data = await res.json();
-  if (!res.ok) { alert(data.error || 'Failed to create checkpoint.'); return; }
+  if (!res.ok) { alert(data.error || t('cp_failed_create')); return; }
   loadCheckpoints();
 });
 
 $('#prune-btn').addEventListener('click', async () => {
   const keepLast = $('#prune-keep-last').value;
-  if (!keepLast) { alert('Enter how many recent checkpoints to keep.'); return; }
-  if (!confirm(`Delete on-disk snapshot data for every checkpoint older than the last ${keepLast}?`)) return;
+  if (!keepLast) { alert(t('cp_enter_keep_count')); return; }
+  if (!confirm(t('cp_confirm_prune', {n: keepLast}))) return;
   const res = await fetch('/api/checkpoints/prune', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({keep_last: parseInt(keepLast, 10)}),
   });
   const data = await res.json();
-  alert(`Pruned ${data.deleted} checkpoint(s).`);
+  alert(t('cp_pruned', {n: data.deleted}));
   loadCheckpoints();
 });
 
@@ -991,45 +2451,45 @@ async function loadMemoryStats() {
   const el = $('#memory-stats');
   const s = await (await fetch('/api/memory/stats')).json();
   el.innerHTML = `
-    <div class="stat-box"><div class="num">${s.active}</div><div class="lbl">Active</div></div>
-    <div class="stat-box"><div class="num">${s.pinned}</div><div class="lbl">Pinned</div></div>
-    <div class="stat-box"><div class="num">${s.superseded}</div><div class="lbl">Superseded</div></div>
-    <div class="stat-box"><div class="num">${s.archived}</div><div class="lbl">Archived</div></div>
-    <div class="stat-box"><div class="num">${s.total}</div><div class="lbl">Total ever</div></div>
+    <div class="stat-box"><div class="num">${s.active}</div><div class="lbl">${esc(t('mem_stat_active'))}</div></div>
+    <div class="stat-box"><div class="num">${s.pinned}</div><div class="lbl">${esc(t('mem_stat_pinned'))}</div></div>
+    <div class="stat-box"><div class="num">${s.superseded}</div><div class="lbl">${esc(t('mem_stat_superseded'))}</div></div>
+    <div class="stat-box"><div class="num">${s.archived}</div><div class="lbl">${esc(t('mem_stat_archived'))}</div></div>
+    <div class="stat-box"><div class="num">${s.total}</div><div class="lbl">${esc(t('mem_stat_total'))}</div></div>
   `;
 }
 
 async function loadMemory() {
   loadMemoryStats();
   const body = $('#memory-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const q = $('#memory-search').value.trim();
   const rows = await (await fetch('/api/memory?q=' + encodeURIComponent(q))).json();
-  if (!rows.length) { body.textContent = 'No memories saved yet.'; return; }
+  if (!rows.length) { body.textContent = t('mem_none_yet'); return; }
   body.className = ''; body.innerHTML = '';
   const table = document.createElement('table');
-  table.innerHTML = `<thead><tr><th>Category</th><th>Title</th><th>Body</th><th></th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>${esc(t('mem_th_category'))}</th><th>${esc(t('mem_th_title'))}</th><th>${esc(t('mem_th_body'))}</th><th></th></tr></thead>`;
   const tbody = document.createElement('tbody');
   rows.forEach(m => {
     const tr = document.createElement('tr');
-    const pinLabel = m.pinned ? 'Unpin' : 'Pin';
+    const pinLabel = m.pinned ? t('mem_unpin') : t('mem_pin');
     tr.innerHTML = `
       <td>${esc(m.category || '')}</td>
       <td>${esc(m.title || '')}</td>
       <td>${esc((m.body || '').slice(0, 160))}</td>
       <td class="row-actions">
-        <button class="btn small ghost" data-act="pin">${pinLabel}</button>
-        <button class="btn small ghost" data-act="edit">Edit</button>
-        <button class="btn small ghost" data-act="forget">Forget</button>
+        <button class="btn small ghost" data-act="pin">${esc(pinLabel)}</button>
+        <button class="btn small ghost" data-act="edit">${esc(t('btn_edit'))}</button>
+        <button class="btn small ghost" data-act="forget">${esc(t('btn_forget'))}</button>
       </td>`;
     tr.querySelector('[data-act=pin]').onclick = async () => {
       await fetch(`/api/memory/${m.id}/${m.pinned ? 'unpin' : 'pin'}`, {method: 'POST'});
       loadMemory();
     };
     tr.querySelector('[data-act=edit]').onclick = async () => {
-      const title = prompt('New title:', m.title);
+      const title = prompt(t('mem_prompt_new_title'), m.title);
       if (title === null) return;
-      const newBody = prompt('New body:', m.body);
+      const newBody = prompt(t('mem_prompt_new_body'), m.body);
       if (newBody === null) return;
       await fetch(`/api/memory/${m.id}/edit`, {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -1038,7 +2498,7 @@ async function loadMemory() {
       loadMemory();
     };
     tr.querySelector('[data-act=forget]').onclick = async () => {
-      if (!confirm(`Forget memory "${m.title}"? This cannot be undone.`)) return;
+      if (!confirm(t('mem_confirm_forget', {title: m.title}))) return;
       await fetch(`/api/memory/${m.id}/forget`, {method: 'POST'});
       loadMemory();
     };
@@ -1054,7 +2514,7 @@ $('#memory-why-btn').addEventListener('click', async () => {
   const el = $('#memory-why-body');
   el.innerHTML = '';
   const rows = await (await fetch('/api/memory/why?q=' + encodeURIComponent(q))).json();
-  if (!rows.length) { el.innerHTML = '<div class="empty">No memories stored yet.</div>'; return; }
+  if (!rows.length) { el.innerHTML = `<div class="empty">${esc(t('mem_why_none'))}</div>`; return; }
   const block = document.createElement('div');
   block.className = 'mono-block';
   block.style.marginBottom = '16px';
@@ -1068,17 +2528,17 @@ $('#memory-why-btn').addEventListener('click', async () => {
 
 $('#memory-consolidate-btn').addEventListener('click', async () => {
   const el = $('#memory-consolidate-body');
-  el.innerHTML = '<div class="empty">Checking...</div>';
+  el.innerHTML = `<div class="empty">${esc(t('checking'))}</div>`;
   const res = await fetch('/api/memory/consolidate', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({dry_run: true}),
   });
   const data = await res.json();
-  if (!data.clusters.length) { el.innerHTML = '<div class="empty">No near-duplicate memories found.</div>'; return; }
+  if (!data.clusters.length) { el.innerHTML = `<div class="empty">${esc(t('mem_no_dupes'))}</div>`; return; }
   el.innerHTML = '';
   const card = document.createElement('div');
   card.className = 'card';
-  card.innerHTML = `<h3>${data.clusters.length} duplicate group(s) found</h3>`;
+  card.innerHTML = `<h3>${esc(t('mem_dupes_found', {n: data.clusters.length}))}</h3>`;
   data.clusters.forEach(c => {
     const line = document.createElement('div');
     line.style.cssText = 'font-size:12px; margin-bottom:6px;';
@@ -1086,9 +2546,9 @@ $('#memory-consolidate-btn').addEventListener('click', async () => {
     card.appendChild(line);
   });
   const applyBtn = document.createElement('button');
-  applyBtn.className = 'btn small'; applyBtn.textContent = 'Apply merge'; applyBtn.style.marginTop = '10px';
+  applyBtn.className = 'btn small'; applyBtn.textContent = t('btn_apply_merge'); applyBtn.style.marginTop = '10px';
   applyBtn.onclick = async () => {
-    if (!confirm('Merge these duplicate groups? Superseded entries stay in the database but stop showing in context.')) return;
+    if (!confirm(t('mem_confirm_merge'))) return;
     await fetch('/api/memory/consolidate', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({dry_run: false}),
@@ -1102,13 +2562,13 @@ $('#memory-consolidate-btn').addEventListener('click', async () => {
 
 $('#memory-stale-btn').addEventListener('click', async () => {
   const el = $('#memory-stale-body');
-  el.innerHTML = '<div class="empty">Checking...</div>';
+  el.innerHTML = `<div class="empty">${esc(t('checking'))}</div>`;
   const rows = await (await fetch('/api/memory/stale')).json();
-  if (!rows.length) { el.innerHTML = '<div class="empty">No memories stale for 30+ days.</div>'; return; }
+  if (!rows.length) { el.innerHTML = `<div class="empty">${esc(t('mem_no_stale'))}</div>`; return; }
   el.innerHTML = '';
   const card = document.createElement('div');
   card.className = 'card';
-  card.innerHTML = `<h3>${rows.length} memor${rows.length === 1 ? 'y' : 'ies'} stale (30+ days, no recent retrieval)</h3>`;
+  card.innerHTML = `<h3>${esc(t(rows.length === 1 ? 'mem_stale_found_one' : 'mem_stale_found_many', {n: rows.length}))}</h3>`;
   rows.forEach(m => {
     const line = document.createElement('div');
     line.style.cssText = 'font-size:12px; margin-bottom:6px;';
@@ -1116,9 +2576,9 @@ $('#memory-stale-btn').addEventListener('click', async () => {
     card.appendChild(line);
   });
   const archiveBtn = document.createElement('button');
-  archiveBtn.className = 'btn small'; archiveBtn.textContent = 'Archive these'; archiveBtn.style.marginTop = '10px';
+  archiveBtn.className = 'btn small'; archiveBtn.textContent = t('btn_archive_these'); archiveBtn.style.marginTop = '10px';
   archiveBtn.onclick = async () => {
-    if (!confirm('Archive these stale memories? This is reversible — archived entries stay in the database and can be restored from the list below.')) return;
+    if (!confirm(t('mem_confirm_archive'))) return;
     await fetch('/api/memory/stale/archive', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})});
     el.innerHTML = '';
     loadMemory();
@@ -1129,20 +2589,20 @@ $('#memory-stale-btn').addEventListener('click', async () => {
 
 $('#memory-archived-btn').addEventListener('click', async () => {
   const el = $('#memory-archived-body');
-  el.innerHTML = '<div class="empty">Loading...</div>';
+  el.innerHTML = `<div class="empty">${esc(t('loading'))}</div>`;
   const rows = await (await fetch('/api/memory/archived')).json();
-  if (!rows.length) { el.innerHTML = '<div class="empty">No archived memories.</div>'; return; }
+  if (!rows.length) { el.innerHTML = `<div class="empty">${esc(t('mem_no_archived'))}</div>`; return; }
   el.innerHTML = '';
   const card = document.createElement('div');
   card.className = 'card';
-  card.innerHTML = `<h3>${rows.length} archived memor${rows.length === 1 ? 'y' : 'ies'}</h3>`;
+  card.innerHTML = `<h3>${esc(t(rows.length === 1 ? 'mem_archived_found_one' : 'mem_archived_found_many', {n: rows.length}))}</h3>`;
   rows.forEach(m => {
     const line = document.createElement('div');
     line.style.cssText = 'font-size:12px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; gap:10px;';
     const label = document.createElement('span');
     label.textContent = `[${m.id}] (${m.category}) ${m.title}`;
     const restoreBtn = document.createElement('button');
-    restoreBtn.className = 'btn small ghost'; restoreBtn.textContent = 'Unarchive';
+    restoreBtn.className = 'btn small ghost'; restoreBtn.textContent = t('btn_unarchive');
     restoreBtn.onclick = async () => {
       await fetch(`/api/memory/${m.id}/unarchive`, {method: 'POST'});
       $('#memory-archived-btn').click();
@@ -1160,21 +2620,21 @@ $('#memory-archived-btn').addEventListener('click', async () => {
 // =========================================================================
 async function loadSkills() {
   const body = $('#skills-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const rows = await (await fetch('/api/skills')).json();
-  if (!rows.length) { body.textContent = 'No skills saved yet.'; return; }
+  if (!rows.length) { body.textContent = t('skills_none_yet'); return; }
   body.className = ''; body.innerHTML = '';
   const table = document.createElement('table');
-  table.innerHTML = `<thead><tr><th>Name</th><th>Description</th><th>Tags</th><th>Uses</th><th></th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>${esc(t('skills_th_name'))}</th><th>${esc(t('skills_th_description'))}</th><th>${esc(t('skills_th_tags'))}</th><th>${esc(t('skills_th_uses'))}</th><th></th></tr></thead>`;
   const tbody = document.createElement('tbody');
   rows.forEach(s => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${esc(s.name)}</td><td>${esc(s.description || '')}</td>
       <td>${esc(s.tags || '')}</td><td>${esc(s.usage_count ?? 0)}</td>
-      <td><button class="btn small ghost" data-act="forget">Forget</button></td>`;
+      <td><button class="btn small ghost" data-act="forget">${esc(t('btn_forget'))}</button></td>`;
     tr.querySelector('[data-act=forget]').onclick = async () => {
-      if (!confirm(`Forget skill "${s.name}"?`)) return;
+      if (!confirm(t('skills_confirm_forget', {name: s.name}))) return;
       await fetch(`/api/skills/${s.name}/forget`, {method: 'POST'});
       loadSkills();
     };
@@ -1192,23 +2652,24 @@ async function loadCuratorStatus() {
   const data = await (await fetch('/api/curator/status')).json();
   if (!data.configured) {
     card.innerHTML = `
-      <h3>Not configured</h3>
+      <h3>${esc(t('curator_not_configured'))}</h3>
       <div style="font-size:12px; color:var(--muted); line-height:1.7;">
-        Curator is fully opt-in and uses its OWN, separate API key -- never your main model's.
-        Set <code>curator_api_key</code> and <code>curator_model</code> (e.g. <code>anthropic:claude-haiku-4-5</code>)
-        on the Config tab to get started.
+        ${t('curator_not_configured_desc', {
+          key1: '<code>curator_api_key</code>', key2: '<code>curator_model</code>',
+          example: '<code>anthropic:claude-haiku-4-5</code>',
+        })}
       </div>`;
     $('#curator-run-card').style.display = 'none';
     $('#curator-diary-card').style.display = 'none';
     return;
   }
   const areaRows = Object.entries(data.areas).map(([name, w]) =>
-    `<div>${esc(name)}: ${w ? esc(w.last_run_at.slice(0, 19)) : 'never curated'}</div>`
+    `<div>${esc(name)}: ${w ? esc(w.last_run_at.slice(0, 19)) : esc(t('curator_never'))}</div>`
   ).join('');
   card.innerHTML = `
-    <h3>${data.enabled ? 'Enabled' : 'Disabled'} -- ${esc(data.model)}</h3>
+    <h3>${esc(data.enabled ? t('curator_enabled_word') : t('curator_disabled_word'))} -- ${esc(data.model)}</h3>
     <div style="font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:10px;">${areaRows}</div>
-    <button class="btn small ghost" id="curator-toggle-btn">${data.enabled ? 'Disable' : 'Enable'}</button>
+    <button class="btn small ghost" id="curator-toggle-btn">${esc(data.enabled ? t('curator_disable_btn') : t('curator_enable_btn'))}</button>
   `;
   $('#curator-toggle-btn').onclick = async () => {
     await fetch(`/api/curator/${data.enabled ? 'disable' : 'enable'}`, {method: 'POST'});
@@ -1221,12 +2682,12 @@ async function loadCuratorStatus() {
 async function loadCuratorDiary() {
   const el = $('#curator-diary-body');
   const rows = await (await fetch('/api/curator/log?limit=30')).json();
-  if (!rows.length) { el.textContent = 'No decisions logged yet.'; el.className = 'empty'; return; }
+  if (!rows.length) { el.textContent = t('curator_no_decisions'); el.className = 'empty'; return; }
   el.className = ''; el.innerHTML = '';
   rows.forEach(r => {
     const line = document.createElement('div');
     line.style.cssText = 'font-size:12px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border);';
-    const applied = r.applied ? '' : ' (dry-run)';
+    const applied = r.applied ? '' : esc(t('curator_dry_run_suffix'));
     const target = r.target_type ? ` ${esc(r.target_type)}:${esc(r.target_id)}` : '';
     line.innerHTML = `
       <div>[${esc((r.created_at || '').slice(0, 19))}] (${esc(r.area)}) <b>${esc(r.action)}</b>${target}${applied}</div>
@@ -1234,12 +2695,12 @@ async function loadCuratorDiary() {
     `;
     if (r.applied) {
       const undoBtn = document.createElement('button');
-      undoBtn.className = 'btn small ghost'; undoBtn.textContent = 'Undo'; undoBtn.style.marginTop = '4px';
+      undoBtn.className = 'btn small ghost'; undoBtn.textContent = t('btn_undo'); undoBtn.style.marginTop = '4px';
       undoBtn.onclick = async () => {
         const res = await fetch(`/api/curator/undo/${r.id}`, {method: 'POST'});
         const data = await res.json();
         if (data.ok) { loadCuratorDiary(); }
-        else { alert(data.message || (data.reversal_hint ? `No automatic undo. Try:\n${data.reversal_hint}` : 'Could not undo.')); }
+        else { alert(data.message || (data.reversal_hint ? t('curator_no_auto_undo', {hint: data.reversal_hint}) : t('curator_could_not_undo'))); }
       };
       line.appendChild(undoBtn);
     }
@@ -1250,6 +2711,7 @@ async function loadCuratorDiary() {
 function loadCurator() {
   loadCuratorStatus();
   loadCuratorDiary();
+  updateCuratorCostWarning();
 }
 
 $('#curator-run-start').addEventListener('click', async () => {
@@ -1266,7 +2728,7 @@ $('#curator-run-start').addEventListener('click', async () => {
   const res = await fetch('/api/curator/run', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   const data = await res.json();
   if (!res.ok) { $('#curator-log').textContent = `[error] ${data.error}`; return; }
-  if (data.ran === false) { $('#curator-log').textContent = `Curator did not run: ${data.reason}`; return; }
+  if (data.ran === false) { $('#curator-log').textContent = t('curator_did_not_run', {reason: data.reason}); return; }
   pollBusy();
   streamTask(data.task_id, $('#curator-log'));
   const evtCheck = setInterval(() => {
@@ -1279,12 +2741,12 @@ $('#curator-run-start').addEventListener('click', async () => {
 // =========================================================================
 async function loadRuns() {
   const body = $('#runs-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const rows = await (await fetch('/api/runs')).json();
-  if (!rows.length) { body.textContent = 'No runs recorded yet.'; return; }
+  if (!rows.length) { body.textContent = t('runs_none_yet'); return; }
   body.className = ''; body.innerHTML = '';
   const table = document.createElement('table');
-  table.innerHTML = `<thead><tr><th>ID</th><th>Model</th><th>Status</th><th>Stop</th><th>Steps</th><th>Checkpoints</th><th>Started</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>${esc(t('runs_th_id'))}</th><th>${esc(t('runs_th_model'))}</th><th>${esc(t('runs_th_status'))}</th><th>${esc(t('runs_th_stop'))}</th><th>${esc(t('runs_th_steps'))}</th><th>${esc(t('runs_th_checkpoints'))}</th><th>${esc(t('runs_th_started'))}</th></tr></thead>`;
   const tbody = document.createElement('tbody');
   rows.forEach(r => {
     const tr = document.createElement('tr');
@@ -1308,24 +2770,24 @@ $('#runs-compare-btn').addEventListener('click', async () => {
   const b = $('#runs-compare-b').value.trim();
   const el = $('#runs-compare-body');
   if (!a || !b) return;
-  el.innerHTML = '<div class="empty">Loading...</div>';
+  el.innerHTML = `<div class="empty">${esc(t('loading'))}</div>`;
   const res = await fetch(`/api/runs/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
   const data = await res.json();
   if (!res.ok) { el.innerHTML = `<div class="empty">${esc(data.error)}</div>`; return; }
   const fmtRun = (label, r) => `
     <div class="card" style="flex:1;">
-      <h3>${label}: ${esc(r.id)}</h3>
+      <h3>${esc(label)}: ${esc(r.id)}</h3>
       <div style="font-size:12px; line-height:1.9;">
-        Branch: ${esc(r.branch_name || '(default)')}<br>
-        Status: ${esc(r.status)}<br>
-        Stop reason: ${esc(r.stop_reason || 'unknown')}<br>
-        Steps: ${r.last_step}/${r.max_steps}<br>
-        Checkpoints: ${r.checkpoints_created}<br>
-        Memories saved: ${r.memories_saved}<br>
-        Estimated cost: ${fmtCost(r.estimated_cost)}
+        ${esc(t('runs_branch'))}: ${esc(r.branch_name || t('runs_default_branch'))}<br>
+        ${esc(t('runs_status'))}: ${esc(r.status)}<br>
+        ${esc(t('runs_stop_reason'))}: ${esc(r.stop_reason || t('runs_unknown'))}<br>
+        ${esc(t('runs_steps'))}: ${r.last_step}/${r.max_steps}<br>
+        ${esc(t('runs_checkpoints'))}: ${r.checkpoints_created}<br>
+        ${esc(t('runs_memories_saved'))}: ${r.memories_saved}<br>
+        ${esc(t('runs_estimated_cost'))}: ${fmtCost(r.estimated_cost)}
       </div>
     </div>`;
-  el.innerHTML = `<div style="display:flex; gap:16px; margin-bottom:16px;">${fmtRun('Run A', data.run_a)}${fmtRun('Run B', data.run_b)}</div>`;
+  el.innerHTML = `<div style="display:flex; gap:16px; margin-bottom:16px;">${fmtRun(t('runs_label_a'), data.run_a)}${fmtRun(t('runs_label_b'), data.run_b)}</div>`;
 });
 
 // =========================================================================
@@ -1334,22 +2796,22 @@ $('#runs-compare-btn').addEventListener('click', async () => {
 let routerTypesLoaded = false;
 async function loadRouter() {
   const body = $('#router-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const taskType = $('#router-task-type').value;
   const qs = taskType ? `?task_type=${encodeURIComponent(taskType)}` : '';
   const data = await (await fetch('/api/router/stats' + qs)).json();
   if (!routerTypesLoaded) {
-    data.task_types.forEach(t => {
+    data.task_types.forEach(tt => {
       const opt = document.createElement('option');
-      opt.value = t; opt.textContent = t;
+      opt.value = tt; opt.textContent = tt;
       $('#router-task-type').appendChild(opt);
     });
     routerTypesLoaded = true;
   }
-  if (!data.stats.length) { body.textContent = 'No explore history recorded yet.'; return; }
+  if (!data.stats.length) { body.textContent = t('router_none_yet'); return; }
   body.className = ''; body.innerHTML = '';
   const table = document.createElement('table');
-  table.innerHTML = `<thead><tr><th>Model</th><th>Wins</th><th>Win rate</th><th>Tests passed</th><th>Avg cost</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>${esc(t('router_th_model'))}</th><th>${esc(t('router_th_wins'))}</th><th>${esc(t('router_th_win_rate'))}</th><th>${esc(t('router_th_tests_passed'))}</th><th>${esc(t('router_th_avg_cost'))}</th></tr></thead>`;
   const tbody = document.createElement('tbody');
   data.stats.forEach(s => {
     const tr = document.createElement('tr');
@@ -1367,7 +2829,7 @@ $('#router-task-type').addEventListener('change', loadRouter);
 // =========================================================================
 async function loadUsage() {
   const body = $('#usage-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const since = $('#usage-since').value;
   const qs = since ? `?since_days=${since}` : '';
   const data = await (await fetch('/api/usage' + qs)).json();
@@ -1375,19 +2837,19 @@ async function loadUsage() {
   const grid = document.createElement('div');
   grid.className = 'stat-grid';
   grid.innerHTML = `
-    <div class="stat-box"><div class="num">${fmtCost(data.total_cost)}</div><div class="lbl">Total cost</div></div>
-    <div class="stat-box"><div class="num">${data.total_calls}</div><div class="lbl">Total calls</div></div>
+    <div class="stat-box"><div class="num">${fmtCost(data.total_cost)}</div><div class="lbl">${esc(t('usage_stat_total_cost'))}</div></div>
+    <div class="stat-box"><div class="num">${data.total_calls}</div><div class="lbl">${esc(t('usage_stat_total_calls'))}</div></div>
   `;
   body.appendChild(grid);
   if (data.has_unpriced_calls) {
     const warn = document.createElement('div');
     warn.className = 'warn-banner';
-    warn.textContent = 'Some calls used a model with no pricing entry -- their cost is not included above.';
+    warn.textContent = t('usage_unpriced_warning');
     body.appendChild(warn);
   }
-  if (!data.by_model.length) { body.appendChild(Object.assign(document.createElement('div'), {className: 'empty', textContent: 'No usage recorded yet.'})); return; }
+  if (!data.by_model.length) { body.appendChild(Object.assign(document.createElement('div'), {className: 'empty', textContent: t('usage_none_yet')})); return; }
   const table = document.createElement('table');
-  table.innerHTML = `<thead><tr><th>Provider</th><th>Model</th><th>Calls</th><th>Input tok</th><th>Output tok</th><th>Cost</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>${esc(t('usage_th_provider'))}</th><th>${esc(t('usage_th_model'))}</th><th>${esc(t('usage_th_calls'))}</th><th>${esc(t('usage_th_input_tok'))}</th><th>${esc(t('usage_th_output_tok'))}</th><th>${esc(t('usage_th_cost'))}</th></tr></thead>`;
   const tbody = document.createElement('tbody');
   data.by_model.forEach(m => {
     const tr = document.createElement('tr');
@@ -1404,9 +2866,9 @@ $('#usage-since').addEventListener('change', loadUsage);
 // =========================================================================
 async function loadLogSessions() {
   const body = $('#log-sessions-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const rows = await (await fetch('/api/action-log')).json();
-  if (!rows.length) { body.textContent = 'No sessions logged yet.'; return; }
+  if (!rows.length) { body.textContent = t('log_none_yet'); return; }
   body.className = ''; body.innerHTML = '';
   rows.forEach(s => {
     const card = document.createElement('div');
@@ -1415,7 +2877,7 @@ async function loadLogSessions() {
     card.innerHTML = `
       <div style="display:flex; justify-content:space-between;">
         <strong>${esc(s.command)}</strong>
-        <span class="pill ${s.error_count ? 'bad' : 'ok'}">${s.action_count} actions${s.error_count ? `, ${s.error_count} errors` : ''}</span>
+        <span class="pill ${s.error_count ? 'bad' : 'ok'}">${s.action_count} ${esc(t('log_actions_word'))}${s.error_count ? `, ${s.error_count} ${esc(t('log_errors_word'))}` : ''}</span>
       </div>
       <div style="color:var(--dim); font-size:11px; margin-top:4px;">${esc((s.session_id || '').slice(0,8))} &middot; ${esc((s.last_at || '').slice(0,19))}</div>
     `;
@@ -1426,9 +2888,9 @@ async function loadLogSessions() {
 
 async function loadLogDetail(sessionId) {
   const body = $('#log-detail-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const rows = await (await fetch(`/api/action-log/${sessionId}`)).json();
-  if (!rows.length) { body.textContent = 'No actions.'; return; }
+  if (!rows.length) { body.textContent = t('log_no_actions'); return; }
   body.className = ''; body.innerHTML = '';
   rows.forEach(a => {
     const div = document.createElement('div');
@@ -1450,12 +2912,12 @@ async function loadLogDetail(sessionId) {
 // =========================================================================
 async function loadModels() {
   const body = $('#models-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const rows = await (await fetch('/api/models')).json();
-  if (!rows.length) { body.textContent = 'No model info available.'; return; }
+  if (!rows.length) { body.textContent = t('models_none'); return; }
   body.className = ''; body.innerHTML = '';
   const table = document.createElement('table');
-  table.innerHTML = `<thead><tr><th>Model</th><th>Stream</th><th>Tools</th><th>Context</th><th>$/1M in</th><th>$/1M out</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>${esc(t('models_th_model'))}</th><th>${esc(t('models_th_stream'))}</th><th>${esc(t('models_th_tools'))}</th><th>${esc(t('models_th_context'))}</th><th>${esc(t('models_th_price_in'))}</th><th>${esc(t('models_th_price_out'))}</th></tr></thead>`;
   const tbody = document.createElement('tbody');
   rows.forEach(m => {
     const tr = document.createElement('tr');
@@ -1464,8 +2926,8 @@ async function loadModels() {
     const pOut = m.output_price_per_million != null ? `$${m.output_price_per_million.toFixed(2)}` : '?';
     tr.innerHTML = `
       <td>${esc(m.provider)}:${esc(m.model)}</td>
-      <td>${m.streaming ? 'yes' : 'no'}</td>
-      <td>${m.tool_use ? 'yes' : 'no'}</td>
+      <td>${esc(m.streaming ? t('yes_word') : t('no_word'))}</td>
+      <td>${esc(m.tool_use ? t('yes_word') : t('no_word'))}</td>
       <td>${ctx}</td><td>${pIn}</td><td>${pOut}</td>`;
     tbody.appendChild(tr);
   });
@@ -1473,7 +2935,7 @@ async function loadModels() {
   body.appendChild(table);
   const note = document.createElement('div');
   note.style.cssText = 'color:var(--dim); font-size:11px; margin-top:12px;';
-  note.textContent = 'Best-effort and may go stale -- verify against your provider\'s own docs before relying on it for capacity planning.';
+  note.textContent = t('models_note');
   body.appendChild(note);
 }
 
@@ -1482,7 +2944,7 @@ async function loadModels() {
 // =========================================================================
 async function loadDoctor() {
   const body = $('#doctor-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const live = $('#doctor-live').checked;
   const rows = await (await fetch('/api/doctor' + (live ? '?live=true' : ''))).json();
   body.className = ''; body.innerHTML = '';
@@ -1505,22 +2967,25 @@ $('#doctor-refresh').addEventListener('click', loadDoctor);
 // CONFIG
 // =========================================================================
 async function loadConfig() {
+  loadRecentProjects();
   const body = $('#config-body');
-  body.textContent = 'Loading...'; body.className = 'empty';
+  body.textContent = t('loading'); body.className = 'empty';
   const data = await (await fetch('/api/config')).json();
   const keys = Object.keys(data);
-  if (!keys.length) { body.textContent = 'No config set.'; return; }
+  if (!keys.length) { body.textContent = t('config_none_set'); return; }
   body.className = ''; body.innerHTML = '';
   const table = document.createElement('table');
-  table.innerHTML = `<thead><tr><th>Key</th><th>Value</th><th></th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>${esc(t('config_th_key'))}</th><th>${esc(t('config_th_value'))}</th><th></th></tr></thead>`;
   const tbody = document.createElement('tbody');
   keys.forEach(k => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${esc(k)}</td><td>${esc(data[k])}</td><td><button class="btn small ghost" data-act="unset">Unset</button></td>`;
+    tr.innerHTML = `<td>${esc(k)}</td><td>${esc(data[k])}</td><td><button class="btn small ghost" data-act="unset">${esc(t('btn_unset'))}</button></td>`;
     tr.querySelector('[data-act=unset]').onclick = async () => {
-      if (!confirm(`Unset "${k}"?`)) return;
+      if (!confirm(t('config_confirm_unset', {key: k}))) return;
       await fetch(`/api/config/${encodeURIComponent(k)}`, {method: 'DELETE'});
       loadConfig();
+      if (k === 'default_model') loadChatModelSelector();
+      if (k === 'reasoning_effort') loadChatEffortSelector();
     };
     tbody.appendChild(tr);
   });
@@ -1539,14 +3004,17 @@ $('#config-set').addEventListener('click', async () => {
   if (!res.ok) { alert(data.error); return; }
   $('#config-value').value = '';
   loadConfig();
+  if (key === 'default_model') loadChatModelSelector();
+  if (key === 'reasoning_effort') loadChatEffortSelector();
 });
 
 $('#setup-btn').addEventListener('click', async () => {
   const provider = $('#setup-provider').value;
   const api_key = $('#setup-key').value;
   const resultEl = $('#setup-result');
-  if (!api_key) { resultEl.textContent = 'Enter an API key first.'; return; }
-  resultEl.textContent = 'Saving...';
+  $('#setup-model-picker').style.display = 'none';
+  if (!api_key) { resultEl.textContent = t('config_enter_key_first'); return; }
+  resultEl.textContent = t('config_saving');
   const res = await fetch('/api/setup', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -1557,13 +3025,61 @@ $('#setup-btn').addEventListener('click', async () => {
   });
   const data = await res.json();
   if (!res.ok) { resultEl.textContent = data.error; return; }
-  let msg = `Saved to ${data.saved_to}.`;
-  if (data.verify) msg += ` Verify: [${data.verify.status}] ${data.verify.message}`;
-  if (data.default_model) msg += ` Default model set to ${data.default_model}.`;
+  let msg = t('config_saved_to', {path: data.saved_to});
+  if (data.verify) msg += t('config_verify_result', {status: data.verify.status, message: data.verify.message});
+  if (data.default_model) msg += t('config_default_set', {model: data.default_model});
+  if (data.default_model_skipped) msg += ' ' + data.default_model_skipped;
   resultEl.textContent = msg;
   $('#setup-key').value = '';
   loadConfig();
   checkStatus();
+  fetchLiveModelsForSetup(provider);
+  if (data.default_model) loadChatModelSelector();
+});
+
+// Populates the "pick a specific model" dropdown from the provider's own live
+// catalog (GET /api/models/<provider>/live) right after a key is saved -- the
+// key is now on disk, so the endpoint's own load_config() call picks it up.
+// Best-effort: a provider without live listing support, or a bad key, just
+// leaves the picker hidden instead of blocking the (already-succeeded) save.
+async function fetchLiveModelsForSetup(provider) {
+  const picker = $('#setup-model-picker');
+  const label = $('#setup-model-picker-label');
+  const select = $('#setup-model-select');
+  label.textContent = t('config_fetching_models');
+  select.innerHTML = '';
+  picker.style.display = 'block';
+  let data;
+  try {
+    const res = await fetch(`/api/models/${encodeURIComponent(provider)}/live`);
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+  } catch (err) {
+    label.textContent = t('config_model_fetch_failed', {error: err.message});
+    return;
+  }
+  if (!data.models || !data.models.length) {
+    picker.style.display = 'none';
+    return;
+  }
+  label.textContent = t('config_pick_model_label', {provider});
+  select.innerHTML = data.models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+}
+
+$('#setup-model-use-btn').addEventListener('click', async () => {
+  const provider = $('#setup-provider').value;
+  const model = $('#setup-model-select').value;
+  if (!model) return;
+  const resultEl = $('#setup-result');
+  const res = await fetch('/api/config', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key: 'default_model', value: `${provider}:${model}`}),
+  });
+  const data = await res.json();
+  if (!res.ok) { resultEl.textContent = data.error; return; }
+  resultEl.textContent = t('config_model_set_to', {model: `${provider}:${model}`});
+  loadConfig();
+  loadChatModelSelector();
 });
 </script>
 </body>

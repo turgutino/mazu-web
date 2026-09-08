@@ -45,11 +45,16 @@ class ChatSession:
         shell_allowlist: list[str] | None,
         session_id: str | None = None,
         resumed_messages: list[dict] | None = None,
+        auto_approve: bool = False,
     ) -> None:
         self.session_id = session_id or str(uuid.uuid4())
         self.root = root
         self.model = model
         self.shell_allowlist = shell_allowlist
+        # Mutable at runtime via set_auto_approve() (the Chat tab's toggle) -- not
+        # just a constructor default -- so a user can flip it mid-conversation the
+        # same way terminal `mazu chat`'s /auto command does.
+        self.auto_approve = auto_approve
 
         self.messages: list[dict] = list(resumed_messages) if resumed_messages else []
         # A resumed session reuses the SAME session_id (and therefore the same
@@ -61,7 +66,9 @@ class ChatSession:
         self.system_prompt: str | None = None
         self.total_cost = 0.0
 
-        self.inbox: "queue.Queue[str]" = queue.Queue()
+        # Items are {"text": str, "images": list[dict]} dicts, except the one bare
+        # "__mazu_web_close__" string close() puts to signal shutdown -- see send().
+        self.inbox: "queue.Queue[dict | str]" = queue.Queue()
         self.outbox: "queue.Queue[dict]" = queue.Queue()
         self._confirm_response: "queue.Queue[bool]" = queue.Queue()
 
@@ -72,11 +79,40 @@ class ChatSession:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def send(self, user_input: str) -> None:
-        self.inbox.put(user_input)
+    def send(
+        self, user_input: str, images: list[dict] | None = None, files: list[dict] | None = None
+    ) -> None:
+        # A plain dict, not a richer type, to keep the inbox's existing Queue[str]
+        # sentinel trick working -- close() still puts the bare string
+        # "__mazu_web_close__", and _run()'s loop tells the two apart with a
+        # simple isinstance check rather than needing a wrapper class for one
+        # sentinel value. `images` is a list of {"media_type": "image/png",
+        # "data": <base64 str, no data: prefix>} dicts; `files` is a list of
+        # {"filename": ..., "text": ...} dicts whose text has ALREADY been
+        # extracted (see mazu/files/document_extract.py) -- both validated and,
+        # for files, extracted by the /api/chat/<id>/message route before this
+        # is ever called, since a raw .docx/.pdf/.xlsx is useless to any
+        # provider and extraction failures need to be a clean 400, not a
+        # confusing error several turns deep in a provider SDK call.
+        self.inbox.put({"text": user_input, "images": images or [], "files": files or []})
 
     def answer_confirm(self, approved: bool) -> None:
         self._confirm_response.put(approved)
+
+    def set_auto_approve(self, enabled: bool) -> None:
+        self.auto_approve = enabled
+
+    def set_model(self, model: str | None) -> None:
+        """Changes the model this session's remaining turns use, effective from the
+        next message on -- lets the Chat page's model chip apply to an already-
+        running session instead of only sessions started after the change. Mirrors
+        __init__'s own resolution so resolved_model/cost_trackable stay consistent
+        with a session that had been started with this model from the start.
+        """
+        self.model = model
+        provider_name, model_name = _split_model(model or default_model())
+        self.resolved_model = f"{provider_name}:{model_name}"
+        self.cost_trackable = estimate_cost(self.resolved_model, 0, 0) is not None
 
     def close(self) -> None:
         self._closed = True
@@ -119,12 +155,15 @@ class ChatSession:
         )
         try:
             while True:
-                user_input = self.inbox.get()
-                if user_input == "__mazu_web_close__":
+                item = self.inbox.get()
+                if item == "__mazu_web_close__":
                     return
-                if not user_input.strip():
+                user_input = item["text"]
+                images = item["images"]
+                files = item["files"]
+                if not user_input.strip() and not images and not files:
                     continue
-                self._handle_message(user_input)
+                self._handle_message(user_input, images, files)
         finally:
             finalize_session(
                 self.memory_store, self.session_id, self.messages,
@@ -136,7 +175,9 @@ class ChatSession:
             self.chat_store.close()
             self.outbox.put({"type": "closed"})
 
-    def _handle_message(self, user_input: str) -> None:
+    def _handle_message(
+        self, user_input: str, images: list[dict] | None = None, files: list[dict] | None = None
+    ) -> None:
         if self.system_prompt is None:
             if self.memory_store is not None and not self.is_resume:
                 self.memory_store.start_session(self.session_id)
@@ -149,9 +190,51 @@ class ChatSession:
             if self.model is None and router_suggestions_enabled():
                 self._emit_router_suggestion(user_input)
 
-        self.messages.append({"role": "user", "content": user_input})
-        self.chat_store.append_message(self.session_id, "user", user_input, model=self.resolved_model)
-        self._run_until_done()
+        # Images (if any) become the canonical Anthropic-shaped {"type": "image",
+        # "source": {...}} blocks every provider converter already understands
+        # (see mazu/llm/providers/*). Files (if any) were already extracted to
+        # plain text by the /api/chat/<id>/message route (see
+        # mazu/files/document_extract.py) -- no provider has a native .docx/
+        # .xlsx content-block type, so each one becomes its own delimited text
+        # block instead. A plain string content stays the common case (no
+        # per-provider conversion needed at all) when there are neither.
+        if images or files:
+            content: str | list[dict] = [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": img["media_type"], "data": img["data"]},
+                }
+                for img in (images or [])
+            ]
+            content.extend(
+                {
+                    "type": "text",
+                    "text": f"--- Attached file: {f['filename']} ---\n{f['text']}\n--- end of {f['filename']} ---",
+                }
+                for f in (files or [])
+            )
+            if user_input.strip():
+                content.append({"type": "text", "text": user_input})
+        else:
+            content = user_input
+
+        # Snapshotted BEFORE appending this turn's user message -- real bug found
+        # via live testing: a turn that fails with a non-retryable MazuAPIError
+        # (e.g. attaching an image to a model that doesn't support vision) used to
+        # leave that failed user message sitting in self.messages forever. Since
+        # every LLM call resends the full history, EVERY subsequent message in the
+        # session -- including ones with no image at all -- kept re-triggering the
+        # exact same "this model does not support image" error, permanently
+        # breaking the conversation until a new chat was started. _run_until_done
+        # restores this snapshot on any unrecoverable failure so a bad turn can't
+        # poison the ones after it. ChatStore's durable record is deliberately NOT
+        # rolled back -- ChatStore keeps everything that was actually attempted,
+        # same as it keeps messages compaction later summarizes away.
+        messages_before_turn = list(self.messages)
+
+        self.messages.append({"role": "user", "content": content})
+        self.chat_store.append_message(self.session_id, "user", content, model=self.resolved_model)
+        self._run_until_done(messages_before_turn)
 
     def _emit_router_suggestion(self, task: str) -> None:
         try:
@@ -167,7 +250,7 @@ class ChatSession:
         except Exception:
             pass
 
-    def _run_until_done(self) -> None:
+    def _run_until_done(self, messages_before_turn: list[dict]) -> None:
         provider_name, model_name = _split_model(self.resolved_model)
         while True:
             on_compacted = extract_memories_on_compaction(
@@ -215,9 +298,11 @@ class ChatSession:
                         on_delta=_on_delta, model=self.model,
                     )
                 except MazuAPIError as e:
+                    self.messages[:] = messages_before_turn
                     self.outbox.put({"type": "error", "text": str(e)})
                     return
             except MazuAPIError as e:
+                self.messages[:] = messages_before_turn
                 self.outbox.put({"type": "error", "text": str(e)})
                 return
             self.messages.append({"role": "assistant", "content": response.content})
@@ -246,6 +331,7 @@ class ChatSession:
             self.outbox.put({
                 "type": "usage",
                 "text": summarize_usage(usage),
+                "step_cost": step_cost,
                 "total_cost": self.total_cost if step_cost is not None else None,
             })
 
@@ -291,20 +377,26 @@ class ChatSession:
                     continue
 
             if tool.destructive:
-                self.outbox.put({
-                    "type": "confirm_request", "tool_name": tool.name, "tool_input": block["input"],
-                })
-                approved = self._confirm_response.get()
-                if not approved:
-                    record_action(
-                        self.action_log_store, self.session_id, "chat", tool.name, block["input"],
-                        "declined", "User declined to run this tool.",
-                    )
-                    tool_results.append({
-                        "type": "tool_result", "tool_use_id": block["id"],
-                        "content": "User declined to run this tool.", "is_error": True,
+                if self.auto_approve:
+                    self.outbox.put({
+                        "type": "tool_auto_run",
+                        "text": f"ran {tool.name} without confirmation (auto mode is on)",
                     })
-                    continue
+                else:
+                    self.outbox.put({
+                        "type": "confirm_request", "tool_name": tool.name, "tool_input": block["input"],
+                    })
+                    approved = self._confirm_response.get()
+                    if not approved:
+                        record_action(
+                            self.action_log_store, self.session_id, "chat", tool.name, block["input"],
+                            "declined", "User declined to run this tool.",
+                        )
+                        tool_results.append({
+                            "type": "tool_result", "tool_use_id": block["id"],
+                            "content": "User declined to run this tool.", "is_error": True,
+                        })
+                        continue
 
             result = tool.handler(block["input"])
             record_action(

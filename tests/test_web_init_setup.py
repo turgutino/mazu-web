@@ -118,6 +118,53 @@ def test_setup_endpoint_verify_flag_calls_check_live_api_key(bare_dir, monkeypat
     assert "anthropic" in captured["model"]
 
 
+def test_setup_endpoint_does_not_set_default_model_when_verify_fails(bare_dir, monkeypatch):
+    # Real bug found live: this endpoint used to run verify and set_default
+    # unconditionally, one after the other -- a key that verify itself just
+    # reported as rejected could still be written to default_model in the same
+    # call, silently breaking Chat/Run for that provider with no chance to
+    # reconsider (unlike the interactive terminal wizard, which shows the
+    # [FAIL] line before asking "Set as default?").
+    def _fake_check(provider_name, model):
+        return CheckResult(name="live key check", status="fail", message="key rejected: 401")
+
+    monkeypatch.setattr(app_module, "check_live_api_key", _fake_check)
+    app = create_app(bare_dir, None, None)
+    client = app.test_client()
+
+    res = client.post("/api/setup", json={
+        "provider": "anthropic", "api_key": "sk-bad-key", "verify": True, "set_default": True,
+    })
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["verify"]["status"] == "fail"
+    assert "default_model" not in data
+    assert "default_model_skipped" in data
+
+    cfg = list_config()
+    assert cfg["anthropic_api_key"] == "sk-bad-key"  # still saved, per the CLI wizard's own behavior
+    assert "default_model" not in cfg
+
+
+def test_setup_endpoint_still_sets_default_model_on_a_verify_warn(bare_dir, monkeypatch):
+    # A "warn" (non-auth error, e.g. a transient network blip) is NOT evidence
+    # the key is actually bad -- only a definite "fail" should block set_default.
+    def _fake_check(provider_name, model):
+        return CheckResult(name="live key check", status="warn", message="couldn't verify (non-auth error)")
+
+    monkeypatch.setattr(app_module, "check_live_api_key", _fake_check)
+    app = create_app(bare_dir, None, None)
+    client = app.test_client()
+
+    res = client.post("/api/setup", json={
+        "provider": "anthropic", "api_key": "sk-maybe-fine", "verify": True, "set_default": True,
+    })
+    data = res.get_json()
+    assert data["verify"]["status"] == "warn"
+    assert data["default_model"] == "anthropic:claude-sonnet-5"
+    assert list_config()["default_model"] == "anthropic:claude-sonnet-5"
+
+
 # ---------------------------------------------------------------------------
 # /api/project/switch, /api/project/browse -- retarget the running server at a
 # different directory without restarting the process. Added alongside the
@@ -220,3 +267,50 @@ def test_setup_endpoint_requires_provider_and_key(bare_dir):
 
     res2 = app.test_client().post("/api/setup", json={"provider": "anthropic"})
     assert res2.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# /api/models/<provider>/live -- fetches the LIVE model catalog from a
+# provider's own API for the currently configured key, distinct from the
+# static /api/models capability table. Lets the Config page offer a real
+# per-provider model picker (e.g. deepseek-chat vs deepseek-reasoner) instead
+# of Mazu guessing a single hardcoded default.
+# ---------------------------------------------------------------------------
+
+
+def test_live_models_endpoint_returns_the_providers_catalog(bare_dir, monkeypatch):
+    captured = {}
+
+    def _fake_list_models(provider_name):
+        captured["provider"] = provider_name
+        return ["deepseek-chat", "deepseek-reasoner"]
+
+    monkeypatch.setattr(app_module, "list_models", _fake_list_models)
+    app = create_app(bare_dir, None, None)
+    client = app.test_client()
+
+    res = client.get("/api/models/deepseek/live")
+    assert res.status_code == 200
+    assert res.get_json() == {"models": ["deepseek-chat", "deepseek-reasoner"]}
+    assert captured["provider"] == "deepseek"
+
+
+def test_live_models_endpoint_rejects_unknown_provider(bare_dir):
+    app = create_app(bare_dir, None, None)
+    res = app.test_client().get("/api/models/not-a-real-provider/live")
+    assert res.status_code == 400
+    assert "unknown provider" in res.get_json()["error"]
+
+
+def test_live_models_endpoint_surfaces_a_bad_key_as_an_error_not_a_500(bare_dir, monkeypatch):
+    from mazu.llm.errors import MazuAuthError
+
+    def _raise(provider_name):
+        raise MazuAuthError("DEEPSEEK_API_KEY is not set")
+
+    monkeypatch.setattr(app_module, "list_models", _raise)
+    app = create_app(bare_dir, None, None)
+
+    res = app.test_client().get("/api/models/deepseek/live")
+    assert res.status_code == 400
+    assert "DEEPSEEK_API_KEY" in res.get_json()["error"]
