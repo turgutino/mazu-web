@@ -31,7 +31,7 @@ def project(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _wait_for(outbox, event_type, timeout=10):
+def _wait_for(outbox, event_type, timeout=20):  # see test_web.py's own _wait_for for why 20s
     deadline = time.time() + timeout
     seen = []
     while time.time() < deadline:

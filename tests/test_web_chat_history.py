@@ -35,7 +35,11 @@ def _end_turn_stream(messages, system, tools, on_delta, model=None):
     return AgentResponse(stop_reason="end_turn", content=[{"type": "text", "text": "hello there"}], usage={})
 
 
-def _wait_for(outbox, event_type, timeout=10):
+def _wait_for(outbox, event_type, timeout=20):
+    # 20s: even the already-bumped-from-5s 10s value (see test_web.py's own
+    # _wait_for) has now been observed to flake on windows-latest CI runners
+    # under load, on a pre-existing test unrelated to whatever else changed in
+    # the same run -- widened further here rather than chasing it per-test.
     deadline = time.time() + timeout
     seen = []
     while time.time() < deadline:

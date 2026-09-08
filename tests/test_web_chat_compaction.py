@@ -41,7 +41,7 @@ def _end_turn_stream(messages, system, tools, on_delta, model=None):
     return AgentResponse(stop_reason="end_turn", content=[{"type": "text", "text": "hi"}], usage={})
 
 
-def _wait_for(outbox, event_type, timeout=10):
+def _wait_for(outbox, event_type, timeout=20):  # see test_web.py's own _wait_for for why 20s
     deadline = time.time() + timeout
     seen = []
     while time.time() < deadline:
