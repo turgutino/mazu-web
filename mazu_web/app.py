@@ -75,10 +75,14 @@ def _validate_chat_images(images: list) -> str | None:
     return None
 
 
-# Documents can legitimately be bigger than a screenshot -- 20,000,000 base64
-# chars decodes to a bit under 15 MiB, generous for a real .docx/.pdf/.xlsx
-# without letting a single upload balloon chat_history.db or a turn's context.
-_MAX_CHAT_FILE_BASE64_CHARS = 20_000_000
+# Documents can legitimately be bigger than a screenshot -- 140,000,000 base64
+# chars decodes to a bit under 100 MiB. Safe to raise well past what an image
+# attachment could tolerate: unlike images (sent to the provider as-is), a
+# document is extracted to plain text before ever reaching the model or
+# chat_history.db, and that extracted text is itself capped independently
+# (MAX_EXTRACTED_CHARS in mazu/files/document_extract.py) -- so a bigger raw
+# file just means more local parsing work, never a bigger stored/sent payload.
+_MAX_CHAT_FILE_BASE64_CHARS = 140_000_000
 
 
 def _validate_and_extract_chat_files(files: list) -> tuple[list, str | None]:
@@ -104,7 +108,7 @@ def _validate_and_extract_chat_files(files: list) -> tuple[list, str | None]:
         if not isinstance(data_b64, str) or not data_b64:
             return [], f"file '{filename}' data must be a non-empty base64 string"
         if len(data_b64) > _MAX_CHAT_FILE_BASE64_CHARS:
-            return [], f"file '{filename}' is too large (max ~15MB)"
+            return [], f"file '{filename}' is too large (max ~100MB)"
         try:
             raw = base64.b64decode(data_b64, validate=True)
         except Exception:

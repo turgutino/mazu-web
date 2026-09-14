@@ -204,7 +204,7 @@ def test_oversized_file_rejected_with_400(project):
     client = app.test_client()
     session_id = client.post("/api/chat/start").get_json()["session_id"]
 
-    huge_data = "A" * 20_000_001
+    huge_data = "A" * 140_000_001
     res = client.post(
         f"/api/chat/{session_id}/message",
         json={"text": "hi", "files": [{"filename": "big.txt", "data": huge_data}]},
