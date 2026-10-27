@@ -159,12 +159,39 @@ def _remember_recent_project(root: Path) -> None:
     path.write_text(json.dumps(entries[:_RECENT_PROJECTS_LIMIT]), encoding="utf-8")
 
 
-def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None):
+_LOOPBACK_HOSTNAMES = {"127.0.0.1", "localhost", "::1"}
+_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _hostname_of(host_header: str) -> str:
+    """Hostname part of a Host header or URL netloc, without port or IPv6 brackets."""
+    host = (host_header or "").strip().lower()
+    if host.startswith("["):
+        end = host.find("]")
+        return host[1:end] if end != -1 else host
+    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+
+
+def create_app(
+    root: Path,
+    model: str | None,
+    shell_allowlist: list[str] | None,
+    allowed_hosts: list[str] | None = None,
+):
     """Builds the Flask app for mazu-web. Every store/manager here is opened fresh
     per request (or per session, for chat/run/explore) and closed immediately --
     the same lifetime the CLI commands themselves give these classes, just behind
     HTTP instead of a single terminal invocation.
+
+    There is no authentication, so two browser-side attacks on a local server are
+    blocked here instead (both confirmed against the unprotected app): DNS
+    rebinding (a hostile page's own domain re-pointed at 127.0.0.1, so its requests
+    arrive with that domain in the Host header) and cross-site POSTs (a form on
+    another site posting to http://127.0.0.1:<port>/..., which browsers send without
+    a CORS preflight). `allowed_hosts` adds hostnames beyond the loopback ones, for
+    someone who deliberately serves mazu-web on a non-loopback address.
     """
+    allowed_hostnames = _LOOPBACK_HOSTNAMES | {h.strip().lower() for h in (allowed_hosts or []) if h.strip()}
     import os
 
     from flask import Flask, Response, jsonify, request, send_from_directory
@@ -177,6 +204,26 @@ def create_app(root: Path, model: str | None, shell_allowlist: list[str] | None)
     os.environ["MAZU_WEB_SURFACE"] = "1"
 
     app = Flask(__name__, static_folder=None)
+
+    @app.before_request
+    def _reject_untrusted_origin():
+        host_header = request.headers.get("Host", "")
+        if _hostname_of(host_header) not in allowed_hostnames:
+            return jsonify({"error": f"Host '{host_header}' is not allowed."}), 403
+        if request.method not in _UNSAFE_METHODS:
+            return None
+        origin = request.headers.get("Origin")
+        if origin is not None:
+            # Same-origin only: the Origin's host:port must be exactly the Host this
+            # request arrived on. "null" (sandboxed frames) never matches.
+            if origin.split("://", 1)[-1].lower() != host_header.lower() or not origin.lower().startswith(
+                ("http://", "https://")
+            ):
+                return jsonify({"error": "Cross-origin requests are not allowed."}), 403
+        elif request.headers.get("Sec-Fetch-Site") not in (None, "same-origin", "none"):
+            return jsonify({"error": "Cross-site requests are not allowed."}), 403
+        return None
+
     # Mutable holder so /api/project/switch can retarget every route below at
     # runtime, without restarting the process -- every route past this point reads
     # project["root"], never the bare `root` parameter (which only seeds the
